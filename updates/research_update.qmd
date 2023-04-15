@@ -1,0 +1,538 @@
+---
+title: "Research Update: April 5"
+author: "Nirupama Tamvada"
+format: pdf
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## 1. Figuring out simulation settings for Ambrogi et. al 2016
+
+The cause-specific hazards of the outcome of interest and the competing risk follow proportional hazards models, specifically:
+
+$$\alpha_{01} = 0.5t \ \text{exp}(\beta_{01} Z)$$
+
+$$\alpha_{02} = t \ \text{exp}(\beta_{02} Z)$$ where both cause-specific hazards have the form of a Weibull distribution and a common set of covariates. Cause 1 is the one of interest with an incidence rate of 54 $\%$ while cause 2 has an incidence rate of 28 $\%$ with a common uniform censoring rate of $\sim 15 \%$.
+
+```{r , set.seed(333)}
+knitr::opts_chunk$set(cache = T)
+
+# independent normal variables 
+p <- 20
+n <- 400
+rho <- 0.5
+
+# Very sparse case
+# Common betas for both competing risks
+beta <- c(0.5, rep(0, 18), 0.5)
+zero_ind1 <- which(beta == 0)
+nonzero_ind1 <- which(beta != 0)
+
+# Generate iid X's 
+X <- matrix(rnorm(p*n), nrow = n, ncol = p)
+# XB matrix
+suma <- X %*% beta
+
+# Function to generate survival times 
+create.times <- function(n, ch, sup.int = 100) { 
+  times <- numeric(n) 
+  i <- 1 
+  while (i <= n) 
+  { u <- runif(1) 
+  if (ch(0, -log(u)) * ch(sup.int, -log(u)) < 0) 
+  { times[i] <- uniroot(ch, c(0, sup.int), tol = 0.0001, y= -log(u))$root 
+  i <- i + 1 
+  } 
+  else { 
+    cat("pos")
+  }} 
+  times
+}
+
+# binomial probability of cause 1 
+binom.status <- function(ftime, n, a01, a02, size = 1) 
+{ prob <- a01(ftime) / (a01(ftime) + a02(ftime))
+out <- rbinom(n, size, prob) 
+out }
+
+
+# Cause-specific proportional hazards 
+times <- vector()
+f.status <- vector()
+for (i in seq_len(n)) {
+alpha.1 <- function(t) { ((0.5*t)*exp(suma[i])) }
+alpha.2 <- function(t) { t*exp(suma[i]) }
+
+cum.haz <- function(t, y) { stats::integrate(alpha.1, lower=0.001, upper=t, 
+                                             subdivisions=1000)$value + 
+ stats::integrate(alpha.2, lower=0.001, upper=t, 
+                 subdivisions=1000)$value - y } 
+times[i] <- create.times(1, cum.haz)
+f.status[i]<- binom.status(times, 1, alpha.1, alpha.2) + 1
+}
+
+# Censoring 
+cens.times <- runif(n, 0, 6)
+
+# Censoring in status variable 
+f.status <- as.numeric(times <= cens.times) * f.status
+
+prop.table(table(f.status))
+
+# times with censoring 
+times <- pmin(times, cens.times) 
+
+# Dataset 
+sim.dat <- data.frame(time = times, status = f.status)
+
+
+sim.dat <- cbind(sim.dat, X)
+
+colnames(sim.dat)[3:22] <- paste0("X", seq_len(p))
+
+head(sim.dat)
+```
+
+## 2. Floating precision of mtool estimators
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Libraries 
+library(casebase)
+library(future.apply)
+library(glmnet)
+library(mtool)
+library(timereg)
+library(parallel)
+library(foreach)
+library(doParallel)
+```
+
+```{r echo = FALSE}
+# Helper functions 
+#' Create the case-base sampled dataset
+#'
+#' @param surv_obj
+#' @param cov_matrix
+#' @param ratio
+#' @return List of 4 elements, containing the necessary data to fit a case-base
+#'   regression model.
+create_cbDataset <- function(surv_obj, cov_matrix, ratio = 10) {
+    n <- nrow(surv_obj)
+    B <- sum(surv_obj[, "time"])
+    c <- sum(surv_obj[, "status"] != 0)
+    b <- ratio * c
+    offset <- log(B/b)
+    prob_select <- surv_obj[, "time"]/B
+    # Create base series
+    which_pm <- sample(n, b, replace = TRUE, prob = prob_select)
+    bSeries <- as.matrix(surv_obj[which_pm, ])
+    time_bseries <- runif(b) * bSeries[, "time"]
+    cov_bseries <- cov_matrix[which_pm, , drop = FALSE]
+    event_bseries <- rep(0L, nrow(bSeries))
+    # Extract case series
+    cSeries <- as.matrix(surv_obj[surv_obj[,"status"] != 0L, ])
+    time_cseries <- cSeries[,"time"]
+    cov_cseries <- cov_matrix[surv_obj[,"status"] != 0L, , drop = FALSE]
+    event_cseries <- cSeries[,"status"]
+    # Combine and return
+    output <- list("time" = c(time_bseries, time_cseries),
+                   "event_ind" = c(event_bseries, event_cseries),
+                   "covariates" = rbind(cov_bseries, cov_cseries),
+                   "offset" = rep(offset, nrow(bSeries) + nrow(cSeries)))
+    
+    return(output)
+}
+
+
+#' Fit case-base sampling model
+#' 
+#' @param cb_data Output of \code{create_cbDataset}
+fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
+                        lambda, alpha = 0.5, unpen_cov = 2) {
+    stopifnot(alpha >= 0 && alpha <= 1)
+    # Elastic-net reparametrization
+    lambda1 <- lambda*alpha
+    lambda2 <- 0.5*lambda*(1 - alpha)
+    # Prepare covariate matrix
+    X <- cbind(cb_data$covariates, log(cb_data$time))
+    # mtool.MNlogistic is too verbose...
+    out <- fit.mtool <- mtool::mtool.MNlogistic(
+        X = as.matrix(cbind(X, 1)),
+        Y = cb_data$event_ind,
+        offset = cb_data$offset,
+        N_covariates = unpen_cov,
+        regularization = 'elastic-net',
+        transpose = FALSE,
+        lambda1 = lambda1, lambda2 = lambda2, 
+        lambda3 = 0
+        )
+    
+    return(out)
+}
+```
+
+```{r message = FALSE, results='hide'}
+# Split into training and test sets
+train.index <- caret::createDataPartition(sim.dat$status, p = 0.70, list = FALSE)
+train <- sim.dat[train.index,]
+validation <- sim.dat[-train.index,]
+
+surv_obj_train <- with(train, Surv(time, as.numeric(status), type = "mstate"))
+
+cov_train <- cbind(train[3:22])
+
+# Create case-base dataset
+cb_data_train <- create_cbDataset(surv_obj_train, as.matrix(cov_train))
+
+# Apply to validation set
+# First fit
+lambdagrid <- rep(0.01, 150)
+cvs_res <- mclapply(lambdagrid, function(lambda_val) {
+fit_val1 <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                          lambda = lambda_val , alpha = 1)
+ }, mc.cores = 4)
+
+lambdagrid <- rep(0.009, 150)
+cvs_res1 <- mclapply(lambdagrid, function(lambda_val) {
+fit_val1 <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                          lambda = lambda_val , alpha = 1)
+ }, mc.cores = 4)
+```
+
+```{r}
+
+non_zero_coefs <-  unlist(mclapply(cvs_res, 
+function(x) {return(x$no_non_zero)}, mc.cores = 4))
+
+non_zero_coefs1 <-  unlist(mclapply(cvs_res1, 
+function(x) {return(x$no_non_zero)}, mc.cores = 4))
+
+# Display different outputs 
+cvs_res[[1]]
+cvs_res[[which(non_zero_coefs != 8)[1]]]
+
+prop.table(table(non_zero_coefs))
+prop.table(table(non_zero_coefs1))
+```
+
+## Fixing the issue
+
+Increased the `tolerance` from 1e-4 to 1e-5 and the `niter_inner_mtplyr` to 15 (from 5) (number of stochastic updates used to estimate the full gradient)
+
+```{r eval = FALSE}
+# Penalized Multinomial Logistic Regression
+mtool.MNlogistic <- function(X, Y, offset, N_covariates,
+                             regularization = 'l1', transpose = F,
+                             lambda1, lambda2 = 0, lambda3 = 0,
+                             learning_rate = 1e-4, tolerance = 1e-5,
+                             niter_inner_mtplyr = 15, maxit = 100, ncores = -1,
+```
+
+```{r echo = FALSE}
+# Penalized Multinomial Logistic Regression
+mtool.MNlogistic <- function(X, Y, offset, N_covariates,
+                             regularization = 'l1', transpose = F,
+                             lambda1, lambda2 = 0, lambda3 = 0,
+                             learning_rate = 1e-4, tolerance = 1e-5,
+                             niter_inner_mtplyr = 15, maxit = 100, ncores = -1,
+                             group_id, group_weights,
+                             groups, groups_var,
+                             own_variables, N_own_variables) {
+    ## Dimensions and checks
+    nx <- nrow(X)
+
+    if (!is.vector(Y)) {Y <- as.vector(Y)}
+    ny <- length(Y)
+
+    if (!is.vector(offset)) {offset <- as.vector(offset)}
+    noff <- length(offset)
+
+    if (nx == ny & nx == noff) {
+        n <- nx
+    } else {
+        stop('X, Y and offset have different number of observations.')
+    }
+
+    p <- ncol(X)
+
+    K <- length(unique(Y)) - 1
+
+    ## regularization
+    pen1 <- c("l0", "l1", "l2", "linf", "l2-not-squared",
+              "elastic-net", "fused-lasso",
+              "group-lasso-l2", "group-lasso-linf",
+              "sparse-group-lasso-l2", "sparse-group-lasso-linf",
+              "l1l2", "l1linf", "l1l2+l1", "l1linf+l1", "l1linf-row-column",
+              "trace-norm", "trace-norm-vec", "rank", "rank-vec", "none")
+    pen2 <- c("graph", "graph-ridge", "graph-l2", "multi-task-graph")
+    pen3 <- c("tree-l0", "tree-l2", "tree-linf", "multi-task-tree")
+
+    if (regularization %in% pen1) { penalty <- 1 }
+    if (regularization %in% pen2) { penalty <- 2 }
+    if (regularization %in% pen3) { penalty <- 3 }
+    if (! regularization %in% c(pen1, pen2, pen3)) {
+        stop('The provided regularization is not supported.')
+    }
+
+    ### check regularization-specific inputs
+    #### penalty = 1, call proximal(Flat), requires `group_id` in integer vector
+    if (penalty == 1) {
+        if (missing(group_id)) { group_id <- rep(0L, p) }
+        group_weights <- vector(mode = 'double')
+        groups <- matrix(NA)
+        groups_var <- matrix(NA)
+        own_variables <- vector(mode = 'integer')
+        N_own_variables <- vector(mode = 'integer')
+    }
+
+    #### penalty = 2, call proximalGraph
+    #### requires `groups` and `groups_var` in integer matrices and `group_weights` in double vector
+    if (penalty == 2) {
+        if (missing(groups)) { stop('Required input `groups` is missing.') }
+        if (missing(groups_var)) { stop('Required input `groups_var` is missing.') }
+        if (missing(group_weights)) { stop('Required input `group_weights` is missing.') }
+        group_id <- rep(0L, p)
+        own_variables <- vector(mode = 'integer')
+        N_own_variables <- vector(mode = 'integer')
+    }
+
+    #### penalty = 3, call proximalGraph
+    #### requires `own_variables` and `N_own_variables` in integer vectors, `group_weights` in double vector
+    #### and `groups` in integer matrix
+    if (penalty == 3) {
+        if (missing(groups)) { stop('Required input `groups` is missing.') }
+        if (missing(own_variables)) { stop('Required input `own_variables` is missing.') }
+        if (missing(N_own_variables)) { stop('Required input `N_own_variables` is missing.') }
+        if (missing(group_weights)) { stop('Required input `group_weights` is missing.') }
+        group_id <- rep(0L, p)
+        groups_var <- matrix(NA)
+    }
+
+    ## call mtool main function
+    result <- MultinomLogistic(X = X, Y = Y, offset = offset, K = K, reg_p = p - N_covariates,
+                               penalty = penalty, regul = regularization, transpose = transpose,
+                               grp_id = group_id, etaG = group_weights,
+                               grp = groups, grpV = groups_var,
+                               own_var = own_variables, N_own_var = N_own_variables,
+                               lam1 = lambda1, lam2 = lambda2, lam3 = lambda3,
+                               learning_rate = learning_rate, tolerance = tolerance,
+                               niter_inner = niter_inner_mtplyr * nx, maxit = maxit,
+                               ncores = ncores)
+    nzc <- length(result$`Sparse Estimates`@i)
+    return(list(coefficients = result$`Sparse Estimates`,
+                no_non_zero = nzc))
+}
+
+
+```
+
+## Running the same test again with new function
+
+```{r echo = FALSE}
+#' Fit case-base sampling model
+#' 
+#' @param cb_data Output of \code{create_cbDataset}
+fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
+                        lambda, alpha = 0.5, unpen_cov = 2) {
+    stopifnot(alpha >= 0 && alpha <= 1)
+    # Elastic-net reparametrization
+    lambda1 <- lambda*alpha
+    lambda2 <- 0.5*lambda*(1 - alpha)
+    # Prepare covariate matrix
+    X <- cbind(cb_data$covariates, log(cb_data$time))
+    # mtool.MNlogistic is too verbose...
+    out <- fit.mtool <- mtool.MNlogistic(
+        X = as.matrix(cbind(X, 1)),
+        Y = cb_data$event_ind,
+        offset = cb_data$offset,
+        N_covariates = unpen_cov,
+        regularization = 'elastic-net',
+        transpose = FALSE,
+        lambda1 = lambda1, lambda2 = lambda2, 
+        lambda3 = 0
+        )
+    
+    return(out)
+}
+```
+
+```{r}
+lambdagrid <- rep(0.02, 150)
+cvs_res <- mclapply(lambdagrid, function(lambda_val) {
+fit_val1 <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                          lambda = lambda_val , alpha = 1)
+ }, mc.cores = 4)
+
+non_zero_coefs <-  unlist(mclapply(cvs_res, 
+function(x) {return(x$no_non_zero)}, mc.cores = 4))
+
+prop.table(table(non_zero_coefs))
+
+lambdagrid <- rep(0.009, 150)
+cvs_res1 <- mclapply(lambdagrid, function(lambda_val) {
+fit_val1 <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                          lambda = lambda_val , alpha = 1)
+ }, mc.cores = 4)
+
+non_zero_coefs1 <-  unlist(mclapply(cvs_res1, 
+function(x) {return(x$no_non_zero)}, mc.cores = 4))
+
+prop.table(table(non_zero_coefs1))
+```
+
+```{r echo = FALSE}
+#' Multinomial deviance
+#' 
+#' @param cb_data Output of \code{create_cbDataset}
+#' @param fit_object Output of \code{fit_cbmodel}
+#' @return Multinomial deviance
+multi_deviance <- function(cb_data, fit_object) {
+  X <- as.matrix(cbind(cb_data$time, cb_data$covariates))
+  fitted_vals <- as.matrix(X %*% fit_object$coefficients)
+  pred_mat <- VGAM::multilogitlink(fitted_vals, 
+                                   inverse = TRUE)
+  # Turn event_ind into Y_mat
+  Y_fct <- factor(cb_data$event_ind)
+  Y_levels <- levels(Y_fct)
+  Y_mat <- matrix(NA_integer_, ncol = length(Y_levels),
+                  nrow = nrow(X))
+  for (i in seq_len(length(Y_levels))) {
+    Y_mat[,i] <- (Y_fct == Y_levels[i])
+  }
+  
+  dev <- VGAM::multinomial()@deviance(pred_mat, Y_mat, 
+                                      w = rep(1, nrow(X)))
+  
+  return(dev)
+}
+```
+
+## 3. Re-writing cross-validation function
+
+```{r}
+# Cross-validation function for mtool 
+# Implement brier score as a metric as well\C-index?
+mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lambdagrid = NULL, alpha = 1, nfold = 10, 
+constant_covariates = 2, n.cores = detectCores()-4, initial_max_grid = NULL, precision = 0.0001, epsilon = .0001, grid_size = 100, plot = FALSE) {
+  # Default lambda grid
+  if(is.null(lambdagrid)) {
+    # Lambda max grid for bisection search 
+    if(is.null(initial_max_grid)) {
+    initial_max_grid <- 
+  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
+    fit_val_max <-  mclapply(initial_max_grid, 
+  function(lambda_val) {
+    fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                               lambda = lambda_val, alpha = alpha)}, mc.cores = n.cores)
+    non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = n.cores))
+   if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
+     warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
+    }
+    upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
+    lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
+    new_max_searchgrid <- seq(lower, upper, precision)
+    fit_val_max <-  mclapply(new_max_searchgrid, 
+        function(lambda_val) {
+   fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+      lambda = lambda_val, alpha = alpha)}, mc.cores = n.cores)
+  non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = n.cores))
+  lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
+  epsilon <- epsilon 
+    K <- grid_size
+  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = K)), digits = 10))
+    }
+  }
+  cb_data_train <- as.data.frame(cb_data_train)
+  # Create folds 
+  folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
+  lambda.min <- rep(NA_real_, nfold)
+  all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  non_zero_coefs <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+ 
+  #Perform 10 fold cross validation
+  for(i in 1:nfold) {
+    #Segment your data by fold using the which() function 
+    train_cv <- cb_data_train[which(folds != i), ] #Set the training set
+    test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
+     # Create X and Y
+    X <- as.matrix(cbind(train_cv[, grepl("covariates", names(train_cv))], train_cv$time))
+    Y <- train_cv$event_ind
+  cvs_res <- mclapply(lambdagrid, function(lambda_val) {
+    lambda1 <- lambda_val*alpha
+    lambda2 <- 0.5*lambda_val*(1 - alpha)
+    # mtool.MNlogistic is too verbose...
+    mtool::mtool.MNlogistic(
+      X = as.matrix(X),
+      Y = Y,
+      offset = train_cv$offset,
+      N_covariates = constant_covariates,
+      regularization = 'elastic-net',
+      transpose = FALSE,
+      lambda1 = lambda1, lambda2 = lambda2, 
+      lambda3 = 0)
+    }, mc.cores = n.cores)
+  test_cv <- list("time" = test_cv$time,
+                 "event_ind" = test_cv$event_ind,
+                 "covariates" = test_cv[, grepl("covariates", names(test_cv))],
+                 "offset" = test_cv$offset)
+  mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
+  all_deviances[, i] <- mult_deviance
+  mean_dev <- rowMeans(all_deviances)
+  lambda.min <- lambdagrid[which.min(mean_dev)]
+  cv_se <- sd(all_deviances[which(lambdagrid == lambda.min),])/sqrt(nfold)
+  dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
+  lambda.1se <- lambdagrid[which((mean_dev <= dev.1se))]
+  lambda.1se <- tail(lambda.1se, n = 1)
+  non_zero_coefs[, i] <-  unlist(mclapply(cvs_res, function(x) {return(x$no_non_zero)}, mc.cores = n.cores))
+  rownames(all_deviances) <- lambdagrid
+  rownames(non_zero_coefs) <- lambdagrid
+  }
+  if(isTRUE(plot)){
+    row_stdev <- apply(all_deviances, 1, function(x) {sd(x)/sqrt(nfold)})
+    plot.dat <- data.frame(lambdagrid = lambdagrid, mean.dev = mean_dev, 
+      upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
+   p <- ggplot2::ggplot(plot.dat, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() +  geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, position=position_dodge(0.05), colour = "grey") + labs(x = "log(lambda)", y = "Multinomial Deviance")  + geom_vline(xintercept = log(lambda.min), linetype = "dotted", colour = "blue") + geom_vline(xintercept = log(lambda.1se), linetype = "dotted", colour = "blue")
+  }
+  return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs,
+              lambda.1se = lambda.1se, cv.se = cv_se, plot.cv = p))
+}
+
+```
+
+```{r eval = FALSE}
+fit.cv <- mtool.multinom.cv(cb_data_train, alpha = 1)
+```
+
+```{r eval = FALSE}
+fit.cv$lambda.min
+fit.cv$lambda.1se
+```
+
+\[1\] 2.9413e-06
+
+\[1\] 0.0034613531
+
+```{r echo = FALSE, fig.align='center', out.width= '50%', fig.show='hold'}
+knitr::include_graphics("~/Desktop/cv.fit.png")
+```
+
+## 4. Final competitor models for casebase
+
+[Link to paper](https://arxiv.org/pdf/2212.05157.pdf)
+
+Final list
+
+1.  Binomial model - Implmeneted
+
+2.  CoxBoost (Boosted Fine-Gray) - Implemented
+
+3.  Penalized Fine-Gray - Implemented
+
+4.  Quantile regression with pseudo values - To implement
+
+## 5. To do and what I am working on now
+
+1.  Final functions for CIF and Brier score (adapted to competing risks)
+
+2.  Weights for the casebase models?

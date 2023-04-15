@@ -237,29 +237,28 @@ colnames(X) <- paste0('x', 1:10)
 Fitting the two models (`nnet` does not provide a penalized implementation of the multinomial regression):
 
 ```{r message = FALSE, results = 'hide'}
-# glmnet 
-fit.glmnet <- fit.glmnet <- glmnet::glmnet(
-  x = X, y = Y,
-  family = "multinomial",
-  intercept = FALSE,
-  type.multinomial = "grouped",  # same sparsity pattern for all outcome classes
-  lambda = 0.1, alpha = 0.5)
-
- # Elastic-net reparametrization
-alpha <- 0.5
-lambda <- 0.1
-lambda1 <- lambda*alpha
-lambda2 <- 0.5*lambda*(1 - alpha)
-# mtool
-fit.mtool <- mtool::mtool.MNlogistic(
-  X = cbind(X),
-  Y = Y,
-  offset = rep(0, length(Y)),
-  N_covariates = 0,
-  regularization = 'elastic-net',
-  transpose = FALSE,
-  lambda1 = lambda1, lambda2 = lambda2, 
-            lambda3 = 0
+# glmnet
+  fit.glmnet <- fit.glmnet <- glmnet::glmnet(
+    x = X, y = Y,
+    family = "multinomial",
+    intercept = FALSE,
+    type.multinomial = "grouped",  # same sparsity pattern for all outcome classes
+    lambda = 0.1, alpha = 0.5)
+   # Elastic-net reparametrization
+  alpha <- 0.5
+  lambda <- 0.1
+  lambda1 <- lambda*alpha
+  lambda2 <- 0.5*lambda*(1 - alpha)
+  # mtool
+  fit.mtool <- mtool::mtool.MNlogistic(
+ X = cbind(X),
+Y = Y,
+offset = rep(0, length(Y)),
+    N_covariates = 0,
+    regularization = 'elastic-net',
+    transpose = FALSE,
+    lambda1 = lambda1, lambda2 = lambda2,
+              lambda3 = 0
 )
 ```
 
