@@ -13,90 +13,38 @@ library(cmprsk)
 # Fitting functions 
 source("../src/fitting_functions_nonparallel.R")
 
-p <- 20
 n <- 400
-rho <- 0.5
+p <- 20
+beta <- list(c(0.5, 0.5, 0.5, 0, 0.5, 0, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0, 0.5), 
+             c(0.2, 0.2, 0.2, 0, 0.2, 0, 0, 0.2, 0, 0.2, 0, 0, 0.2, 0, 0.2, 0, 0, 0.2, 0, 0.2))
+dist.ev <- c("weibull", "weibull")
+anc.ev <- c(0.8, 0.3)
+beta0.ev <- c(0.1, 0.1)
 
-# Non-sparse
-beta <- c(0.5, 0.5, 0.5, 0, 0.5, 0, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0, 0.5)
-beta1 <- -beta
+# Generating survival data 
+sim.data <- crisk.sim(n = n, p = p, rho = 0.5, foltime = 4, dist.ev = dist.ev, 
+                      anc.ev = anc.ev, beta0.ev = beta0.ev, beta0.cens = 0.05, anc.cens = 4, nsit = 2, 
+                      beta = beta)
 
-zero_ind1 <- which(beta == 0)
-nonzero_ind1 <- which(beta != 0)
+# fix status variable
+sim.data$cause <- with(sim.data, ifelse(is.na(sim.data$cause), 0, sim.data$cause))
+colnames(sim.data)[grepl("x", colnames(sim.data))]   <- paste0("X", seq_len(p))
 
+# Format data
+sim.data <- sim.data %>%
+  select(-nid, -status, -start, -stop, -z) %>%
+  rename(status = cause)
 
-# AR(1) correlation
-Sigma <- covAR1(p = p, rho = rho)
-X <- mvtnorm::rmvnorm(n, sigma = Sigma)
-
-
-# XB matrix
-suma1 <- X %*% beta
-suma2 <- X %&% beta1
-
-# Function to generate survival times 
-create.times <- function(n, ch, sup.int = 100) { 
-  times <- numeric(n) 
-  i <- 1 
-  while (i <= n) 
-  { u <- runif(1) 
-  if (ch(0, -log(u)) * ch(sup.int, -log(u)) < 0) 
-  { times[i] <- uniroot(ch, c(0, sup.int), tol = 0.0001, y= -log(u))$root 
-  i <- i + 1 
-  } 
-  else { 
-    cat("pos")
-  }} 
-  times
-}
-
-# binomial probability of cause 1 
-binom.status <- function(ftime, n, a01, a02, size = 1) 
-{ prob <- a01(ftime) / (a01(ftime) + a02(ftime))
-out <- rbinom(n, size, prob) 
-out }
-
-
-# Cause-specific proportional hazards 
-times <- vector()
-f.status <- vector()
-for (i in seq_len(n)) {
-  alpha.1 <- function(t) { ((0.5*t)*exp(suma1[i])) }
-  alpha.2 <- function(t) { t*exp(suma2[i]) }
-  
-  cum.haz <- function(t, y) { stats::integrate(alpha.1, lower=0.001, upper=t, 
-                                               subdivisions=1000)$value + 
-      stats::integrate(alpha.2, lower=0.001, upper=t, 
-                       subdivisions=1000)$value - y } 
-  times[i] <- create.times(1, cum.haz)
-  f.status[i]<- binom.status(times, 1, alpha.1, alpha.2) + 1
-}
-
-
-# Censoring 
-# Set seed to be somwehat consistent between simulations 
-set.seed(121)
-cens.times <- runif(n, 0, 6)
-
-# Censoring in status variable 
-f.status <- as.numeric(times <= cens.times) * f.status
-
-# times with censoring 
-times <- pmin(times, cens.times) 
-
-# Dataset 
-sim.dat <- data.frame(time = times, status = f.status)
-
-sim.dat <- cbind(sim.dat, X)
+# Average estimates of incidence and censoring rate
+prop.table(table(sim.data$status))
 
 # True cumulative incidence 
-cif <- cuminc(ftime = sim.dat$time, fstatus = sim.dat$status)
+cif <- cuminc(ftime = sim.data$time, fstatus = sim.data$status)
 cif
 
-colnames(sim.dat)[3:22] <- paste0("X", seq_len(p))
 #################################################################
 # Split into training and validation sets (stratified)
-train.index <- caret::createDataPartition(sim.dat$status, p = 0.70, list = FALSE)
+train.index <- caret::createDataPartition(sim.dat$status, p = 0.80, list = FALSE)
 train <- sim.dat[train.index,]
 test <- sim.dat[-train.index,]
 ######################### Cause-specific proportional hazards model ###############

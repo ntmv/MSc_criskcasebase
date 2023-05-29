@@ -1,0 +1,328 @@
+---
+title: "May 17: Meeting Update"
+format: pdf
+editor: visual
+---
+
+## Simulation Settings
+
+-   Data generated from two proportional hazards models:
+
+-   Simulation Settings
+
+    The cause-specific hazards of the outcome of interest and the competing risk follow proportional hazards models, specifically:
+
+    $$\alpha_{01} = 0.5t \ \text{exp}(\beta_{01} Z)$$
+
+    $$\alpha_{02} = t \ \text{exp}(\beta_{02} Z)$$ where both cause-specific hazards have the form of a Weibull distribution and a common set of covariates.
+
+-   Cause 1 is the one of interest. Censoring times were generated from a $U[0, 6]$ distribution. This leads to $\sim 25 \%$ censorings, $55 \%$ of the cause of interest and $20 \%$ for the competing cause.
+
+-   There are two covariate generation settings: IID and with an AR(1) correlation setting with $\rho = 0.5$.
+
+-   Extreme sparsity: 1000 covariates were generated with only 16 non-zero covariates
+
+## Optimizing lambda value
+
+### Log Lambda path against Multinomial Deviance
+
+```{r echo = FALSE, out.width = '60%'}
+knitr::include_graphics("~/Desktop/cv_plot.png")
+```
+
+-   Plot doesn't curve up again, quite flat maybe sparsity of simulation?
+
+-   Lambda min is quite close to lambda max
+
+-   All folds don't reach zero at lambda max?
+
+```{r eval = FALSE}
+$non_zero_coefs
+             [,1] [,2] [,3] [,4] [,5] [,6] [,7] [,8] [,9] [,10]
+3.2e-05      2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+3.43126e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+3.67922e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+3.94511e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+4.23021e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+4.53592e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+4.86372e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+5.2152e-05   2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+5.59209e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+5.99622e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+6.42955e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+6.89419e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+7.39242e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+7.92664e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+8.49948e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+9.11371e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+9.77234e-05  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001047856 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001123581 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001204779 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001291846 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001385204 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001485308 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001592648 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001707744 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0001831158 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.000196349  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0002105386 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0002257537 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0002420683 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0002595619 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0002783197 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0002984331 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.00032      2002 2002 2002 2002 2002 2001 2002 2002 2002  2002
+0.0003431255 2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0003679222 2002 2002 2002 2002 2002 2001 2002 2002 2002  2002
+0.000394511  2002 2002 2002 2002 2002 2002 2002 2002 2002  2002
+0.0004230212 2002 2002 2002 2002 2002 2001 2002 2002 2002  2002
+0.0004535917 2002 2001 2002 2002 2002 2002 2002 2002 2002  2001
+0.0004863715 2002 2002 2002 2002 2002 2002 2002 2002 2002  2001
+0.0005215203 2002 2002 2002 2002 2002 2002 2002 2002 2002  2001
+0.0005592091 2002 2002 2001 2002 2002 2001 2002 2002 2002  2002
+0.0005996216 2002 2000 2002 2002 2002 2002 2002 2002 2002  2001
+0.0006429546 2000 2000 2000 2002 2001 2002 2002 2001 2002  2002
+0.0006894191 2002 2001 2002 2002 2002 2002 2002 2002 2002  2001
+0.0007392415 2002 2002 2002 2002 2000 2002 2001 2002 2001  2001
+0.0007926644 2002 2001 2001 1999 2002 2001 2000 2002 2002  2002
+0.0008499481 2001 2002 2001 1999 2002 2002 2001 2000 2002  2000
+0.0009113715 2001 2000 2001 2002 2001 2001 2000 2001 2001  2001
+0.0009772338 2000 1999 2000 1999 2002 2001 2000 2001 2001  2000
+0.0010478557 2000 2002 2000 2000 1999 1999 1998 1995 2001  2001
+0.0011235814 2001 2001 1997 1999 1998 2000 1997 2001 1997  1998
+0.0012047795 1999 1999 1995 1998 2001 1999 1994 1996 1996  1996
+0.0012918455 1999 2000 1999 1996 1999 1998 1993 1999 2000  1995
+0.0013852036 1999 1995 1988 1991 2001 1999 1994 1998 1999  1999
+0.0014853084 1996 1994 1994 1997 1994 1994 1993 1988 1994  1996
+0.0015926475 1993 1993 1997 1991 1994 1986 1992 1995 1995  1997
+0.0017077438 1991 1993 1989 1991 1996 1990 1989 1988 1996  1994
+0.0018311577 1987 1996 1988 1988 1990 1987 1990 1995 1990  1992
+0.0019634903 1970 1990 1986 1993 1981 1984 1985 1989 1986  1979
+0.0021053863 1976 1975 1976 1982 1985 1976 1990 1974 1982  1987
+0.0022575367 1972 1966 1963 1959 1968 1973 1969 1965 1979  1974
+0.0024206826 1970 1959 1965 1974 1959 1939 1960 1959 1967  1972
+0.0025956187 1959 1937 1946 1967 1960 1962 1965 1952 1952  1954
+0.0027831968 1936 1947 1960 1954 1956 1938 1964 1957 1956  1946
+0.0029843307 1946 1948 1936 1931 1939 1913 1881 1939 1949  1924
+0.0032       1916 1899 1899 1921 1876 1872 1911 1902 1925  1924
+0.0034312551 1909 1906 1877 1942 1889 1905 1809 1878 1918  1902
+0.0036792224 1823 1894 1884 1800 1865 1829 1838 1889 1866  1869
+0.0039451096 1837 1872 1819 1841 1858 1832 1743 1830 1852  1776
+0.0042302117 1820 1821 1671 1773 1839 1753 1681 1714 1851  1837
+0.0045359173 1715 1551 1772 1787 1732 1750 1697 1730 1757  1770
+0.0048637155 1716 1504 1943 1751 1557 1631 1950 1916 1943  1627
+0.0052152027 1921 1952 1933 1929 1949 1949 1908 1922 1925  1923
+0.0055920909 1912 1932 1887 1945 1906 1924 1872 1918 1940  1881
+0.0059962158 1928 1940 1927 1903 1891 1932 1902 1875 1891  1882
+0.0064295456 1914 1827 1883 1883 1857 1885 1870 1844 1827  1880
+0.006894191  1651 1794 1884 1835 1857 1792 1839 1899 1877  1733
+0.007392415  1732 1782 1733 1607 1825 1737 1725 1829 1753  1695
+0.0079266443 1697 1875 1694 1777 1543 1774 1772 1730 1820  1554
+0.0084994809 1781 1701 1667 1764 1517 1379 1627 1652 1475  1758
+0.0091137148 1530 1639 1279 1428 1369 1607 1349 1709 1125  1631
+0.0097723376 1422 1473 1570 1192 1304 1610 1193  973 1066  1258
+0.0104785573 1581 1557 1516 1601 1639 1143 1056 1406 1480  1498
+0.0112358135 1475  910 1438 1453 1378  922  712 1112 1261  1088
+0.0120477946  579  706  734 1210  865  829  919  614 1387  1010
+0.0129184552 1379  948 1070  621 1049  804  670  523 1028  1004
+0.0138520361  720  575  617  833  539  662  651  423 1066   579
+0.0148530843  354  551  399  425  341  298  571  236  724   674
+0.0159264754  202  341  513  419  311  285  202  164  263   574
+0.0170774375  369  145  133  117  280  123  163  144  350   235
+0.0183115765  129  136  535  109  109  357  157  188  358   350
+0.0196349033   86   45  479  381   50  146   61  338  184   475
+0.0210538632   56   36   58  686   55  167   69   49   58    47
+0.0225753674   25   33  139  101   29   22   32   30   39   291
+0.0242068265   79   15   23   23   53  313  117   29   12   185
+0.0259561866   26    8   22   22   22   12    4   11   47    19
+0.0278319681   18    9   11    8   14   18    5   34   25     7
+0.0298433071   70    4    8   13    4   14    5    5    5    11
+0.032           4    5    4    4    8    5    4    4    4     4
+```
+
+## Lambda 1se and 0.5se in other direction
+
+-   Got confused with calculation: calculated `lambda.min 0.5se` as such but `lambda.min` is the minimum, code has been changed now
+
+```{r eval = FALSE}
+dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
+```
+
+New code:
+
+-   `lambda.1se` - largest lambda value that is within 1SE
+
+-   `lambda.0.5se` - largest lambda value that is within 1SE/2
+
+-   `lambda.min1se` - smallest lambda value that is within 1SE
+
+-   `lambda.min1se` - smallest lambda value that is within 1SE/2
+
+```{r, eval = FALSE}
+mean_dev <- rowMeans(all_deviances)
+    lambda.min <- lambdagrid[which.min(mean_dev)]
+    cv_se <- sqrt(var(mean_dev)/nfold)
+    dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
+    dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
+    range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
+    lambda.1se <- tail(range.1se, n = 1)
+    lambda.min1se <- range.1se[1]
+    range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
+    lambda.0.5se <- tail(range.0.5se, n = 1)
+    lambda.min0.5se <- range.0.5se[1]
+```
+
+## Results for N = 400, p = 1000 (p \> N) (Number of Simulations = 10)
+
+```{r echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE, echo = FALSE}
+# Libraries 
+library(readr)
+library(purrr)
+library(tidyverse)
+library(data.table)
+
+# Read in all the output read files 
+path <- "~/Desktop/results_pgn_iid_sparse"
+copynum.files <- dir(path, pattern = "*iidsparse.csv$")
+
+# Nested data frame with file names 
+iid_sparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+iid_sparse_dat <- unnest(iid_sparse_dat, cols = c(file_contents))
+
+iid_sparse_dat <- iid_sparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("IID", nrow(iid_sparse_dat))) %>%
+  mutate(sparse_setting = rep( "Sparse", nrow(iid_sparse_dat)))
+
+
+# Read in all the output read files 
+path <- "~/Desktop/results_pgn_cor_sparse"
+copynum.files <- dir(path, pattern = "*corsparse.csv$")
+
+# Nested data frame with file names 
+cor_sparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+cor_sparse_dat <- unnest(cor_sparse_dat, cols = c(file_contents))
+
+cor_sparse_dat <- cor_sparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("AR(1)", nrow(cor_sparse_dat))) %>%
+  mutate(sparse_setting = rep( "Sparse", nrow(cor_sparse_dat)))
+
+pgn_res <- rbind(iid_sparse_dat, cor_sparse_dat)
+
+pgn_res  <- pgn_res  %>%
+  mutate(Model = case_when(
+    .=="res_cb_min" ~ "lambda.min",
+    .=="res_cb_1se" ~ "lambda.1se",
+    .=="res_cb_0.5se" ~ "lambda.0.5se",
+  ))
+
+write.csv(pgn_res, file = "~/Desktop/pgn_res.csv")
+```
+
+```{r echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+library(tidyverse)
+
+pgn_res <- read.csv("pgn_res.csv")
+
+pgn_res <- pgn_res[,-1]
+
+pgn_res_stats <- pgn_res %>%
+  group_by(Model, cor_setting, sparse_setting) %>%
+  summarise(mean_sp = mean(Sp), mean_se = mean(Se), 
+            median_sp = median(Sp), median_se = median(Se),
+            se_sp = sd(Sp), se_se = sd(Se), miss_se = sum(Se == 0)/n(), 
+            miss_sp = sum(Sp == 0)/n(), iqr_sp = IQR(Sp), iqr_se = IQR(Se), 
+            max_sp = max(Sp), max_se = max(Se), perc_se = sum(Se > 0.60)/n(), 
+            perc_sp = sum(Sp > 0.60)/n())
+
+pgn_res_stats <- pgn_res_stats %>%
+  mutate_if(is.numeric, round, digits = 3) %>%
+  mutate(mean_sp = paste0(mean_sp," ", "(", se_sp, ")")) %>%
+  mutate(mean_se = paste0(mean_se, " ","(", se_se, ")")) %>%
+  mutate(median_sp = paste0(median_sp," ", "(", iqr_sp, ")")) %>%
+  mutate(median_se = paste0(median_se," ", "(", iqr_se, ")")) %>%
+  select(-se_sp, -se_se, -iqr_sp, -iqr_se) %>%
+  select(-sparse_setting)
+
+knitr::kable(pgn_res_stats[,1:6], col.names = c("Model", "Correlation Setting", "Mean Sp", "Mean Se", "Median Sp", "Median Se"), caption = "Summary Variable Selection Statistics for Sparse Casebase and Binomial Regression. Mean (SD) and Median (IQR)")
+
+
+knitr::kable(pgn_res_stats[, c(1, 2, 7, 8)], col.names = c("Model", "Correlation Setting", "Miss Rate of Se (Se = 0)", "Miss Rate of Sp (Sp = 0)"), caption = "Summary Variable Selection Statistics for Sparse Casebase and Binomial Regression. Mean (SD) and Median (IQR)")
+
+
+knitr::kable(pgn_res_stats[, c(1, 2, 9:12)], col.names = c("Model", "Correlation Setting", "Max Sp", "Max Se", "Sp > 0.70", "Se > 0.70"), caption = "Summary Variable Selection Statistics for Sparse Casebase and Binomial Regression. Mean (SD) and Median (IQR)")
+
+
+```
+
+```{r echo = FALSE, eval = FALSE}
+Res1 <- read.csv("~/Desktop/results1.csv")
+Res2 <- read.csv("~/Desktop/Res2.csv")
+
+library(tidyverse)
+
+colnames(Res1) <- c("Model", "Sp", "Se", "FPR", "FNR") 
+colnames(Res2) <- c("Model", "Sp", "Se", "FPR", "FNR") 
+
+Res1 <- Res1 %>%
+  mutate(Model = case_when(grepl("1se", Model) ~ "1se",
+                           grepl("min", Model) ~ "min",
+                           grepl("0.5se", Model) ~ "0.5se"))
+
+
+Res2 <- Res2 %>%
+  mutate(Model = case_when(grepl("1se", Model) ~ "1se",
+                           grepl("min", Model) ~ "min",
+                           grepl("0.5se", Model) ~ "0.5se"))
+
+Res1 <- Res1 %>%
+  group_by(Model)  %>%
+  summarise(mean_sp = mean(Sp), mean_se = mean(Se), 
+            median_sp = median(Sp), median_se = median(Se),
+            se_sp = sd(Sp), se_se = sd(Se), miss_se = sum(Se == 0)/n(), 
+            miss_sp = sum(Sp == 0)/n(), iqr_sp = IQR(Sp), iqr_se = IQR(Se), 
+            max_sp = max(Sp), max_se = max(Se))
+
+Res2 <- Res2 %>%
+  group_by(Model)  %>%
+  summarise(mean_sp = mean(Sp), mean_se = mean(Se), 
+            median_sp = median(Sp), median_se = median(Se),
+            se_sp = sd(Sp), se_se = sd(Se), miss_se = sum(Se == 0)/n(), 
+            miss_sp = sum(Sp == 0)/n(), iqr_sp = IQR(Sp), iqr_se = IQR(Se),
+            max_sp = max(Sp), max_se = max(Se))
+
+
+Res1<- Res1 %>%
+  mutate_if(is.numeric, round, digits = 3) %>%
+  mutate(mean_sp = paste0(mean_sp," ", "(", se_sp, ")")) %>%
+  mutate(mean_se = paste0(mean_se, " ","(", se_se, ")")) %>%
+  mutate(median_sp = paste0(median_sp," ", "(", iqr_sp, ")")) %>%
+  mutate(median_se = paste0(median_se," ", "(", iqr_se, ")")) %>%
+  select(-se_sp, -se_se, -iqr_sp, -iqr_se)
+
+Res2<- Res2 %>%
+  mutate_if(is.numeric, round, digits = 3) %>%
+  mutate(mean_sp = paste0(mean_sp," ", "(", se_sp, ")")) %>%
+  mutate(mean_se = paste0(mean_se, " ","(", se_se, ")")) %>%
+  mutate(median_sp = paste0(median_sp," ", "(", iqr_sp, ")")) %>%
+  mutate(median_se = paste0(median_se," ", "(", iqr_se, ")")) %>%
+  select(-se_sp, -se_se, -iqr_sp, -iqr_se)
+```
+
+## Next Steps
+
+-   Compare `casebase`, `Fine-Gray` and `Binomial models` in terms of CIF prediction error and Brier score. These results will be generated for next week's meeting
+
+-   Re-create Austin et al., result for Casebase

@@ -251,6 +251,23 @@ plot_cv.multinom <- function(all_deviances, lambdagrid, lambda.min, lambda.1se, 
   return(p)
 }
 
+################### Function to calculate specificity, sensitivity and MCC ###############
+varsel_perc <- function(model_coef, true_coef) {
+  zero_ind1 <- which(true_coef == 0)
+  nonzero_ind1 <- which(true_coef != 0)
+  TP <- length(intersect(which(model_coef != 0), nonzero_ind1))
+  TN <- length(intersect(which(model_coef == 0), zero_ind1))
+  FP <- length(intersect(which(model_coef != 0), zero_ind1))
+  FN <- length(intersect(which(model_coef == 0), nonzero_ind1))
+  sens <- TP/(TP+FN)
+  spec <- TN/(TN+FP)
+  mcc_num <- (TP*TN)-(FP*FN)
+  mcc_den <- (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+  mcc <- mcc_num/sqrt(mcc_den)
+  dat <- as.data.frame(cbind(TP = TP, TN = TN, FP = FP, FN = FN, Sensitivity = sens, Specificity = spec, MCC = mcc))
+  return(dat)
+}
+
 #' ###########################################################
 #' #' Bootstrapping function for standard error of multinomial deviance
 #' bootstrap_cvse <- function(x, y, alpha = alpha, B = B, lambdagrid, test_cv){

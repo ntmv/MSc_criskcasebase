@@ -130,7 +130,7 @@ fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
     lambda1 <- lambda*alpha
     lambda2 <- 0.5*lambda*(1 - alpha)
     # Prepare covariate matrix
-    X <- cbind(cb_data$covariates, log(cb_data$time))
+    X <- as.matrix(cb_data$covariates)
     # mtool.MNlogistic is too verbose...
     out <- fit.mtool <- mtool::mtool.MNlogistic(
         X = as.matrix(cbind(X, 1)),
@@ -163,22 +163,20 @@ covAR1 <- function(p, rho) {
 }
 
 ###########################################################
-
-# Cross-validation function for mtool 
-# Implement brier score as a metric as well\C-index?
-mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lambdagrid = NULL, alpha = 1, nfold = 10, 
-                              constant_covariates = 2, n.cores = detectCores()-4, initial_max_grid = NULL, precision = 0.0001, epsilon = .0001, grid_size = 100, plot = FALSE) {
+#' Cross-validation function for mtool 
+mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+                              constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE) {
   # Default lambda grid
-  if(is.null(lambdagrid)) {
+  if(is.null(lambda_max)) {
     # Lambda max grid for bisection search 
     if(is.null(initial_max_grid)) {
       initial_max_grid <- 
         c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
-      fit_val_max <-  mclapply(initial_max_grid, 
+      fit_val_max <- mclapply(initial_max_grid, 
                                function(lambda_val) {
                                  fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha)}, mc.cores = n.cores)
-      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = n.cores))
+                                             lambda = lambda_val, alpha = alpha)}, mc.cores = 4)
+      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
       if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
         warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
       }
@@ -188,14 +186,12 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
       fit_val_max <-  mclapply(new_max_searchgrid, 
                                function(lambda_val) {
                                  fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha)}, mc.cores = n.cores)
-      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = n.cores))
+                                             lambda = lambda_val, alpha = alpha)}, mc.cores = 4)
+      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = 4))
       lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
-      epsilon <- epsilon 
-      K <- grid_size
-      lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = K)), digits = 10))
     }
   }
+  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
   cb_data_train <- as.data.frame(cb_data_train)
   # Create folds 
   folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
@@ -209,49 +205,94 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
     train_cv <- cb_data_train[which(folds != i), ] #Set the training set
     test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
     # Create X and Y
-    X <- as.matrix(cbind(train_cv[, grepl("covariates", names(train_cv))], train_cv$time))
-    Y <- train_cv$event_ind
-    cvs_res <- mclapply(lambdagrid, function(lambda_val) {
-      lambda1 <- lambda_val*alpha
-      lambda2 <- 0.5*lambda_val*(1 - alpha)
-      # mtool.MNlogistic is too verbose...
-      mtool::mtool.MNlogistic(
-        X = as.matrix(X),
-        Y = Y,
-        offset = train_cv$offset,
-        N_covariates = constant_covariates,
-        regularization = 'elastic-net',
-        transpose = FALSE,
-        lambda1 = lambda1, lambda2 = lambda2, 
-        lambda3 = 0)
-    }, mc.cores = n.cores)
+    train_cv <- list("time" = train_cv$time,
+         "event_ind" = train_cv$event_ind,
+         "covariates" = train_cv[, grepl("covariates", names(train_cv))],
+         "offset" = train_cv$offset)
+    cvs_res <- mclapply(lambdagrid, 
+      function(lambda_val) {
+      fit_cbmodel(train_cv, regularization = 'elastic-net',
+                  lambda = lambda_val, alpha = alpha)
+    }, mc.cores = 4)
     test_cv <- list("time" = test_cv$time,
                     "event_ind" = test_cv$event_ind,
                     "covariates" = test_cv[, grepl("covariates", names(test_cv))],
                     "offset" = test_cv$offset)
-    mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
+    mult_deviance <- unlist(mclapply(cvs_res, multi_deviance, cb_data = test_cv, mc.cores = 4))
     all_deviances[, i] <- mult_deviance
     mean_dev <- rowMeans(all_deviances)
     lambda.min <- lambdagrid[which.min(mean_dev)]
-    cv_se <- sd(all_deviances[which(lambdagrid == lambda.min),])/sqrt(nfold)
+    cv_se <- sqrt(var(mean_dev)/nfold)
     dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
-    lambda.1se <- lambdagrid[which((mean_dev <= dev.1se))]
-    lambda.1se <- tail(lambda.1se, n = 1)
-    non_zero_coefs[, i] <-  unlist(mclapply(cvs_res, function(x) {return(x$no_non_zero)}, mc.cores = n.cores))
+    dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
+    range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
+    lambda.1se <- tail(range.1se, n = 1)
+    lambda.min1se <- range.1se[1]
+    range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
+    lambda.0.5se <- tail(range.0.5se, n = 1)
+    lambda.min0.5se <- range.0.5se[1]
+    non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
     rownames(all_deviances) <- lambdagrid
     rownames(non_zero_coefs) <- lambdagrid
   }
-  if(isTRUE(plot)){
-    row_stdev <- apply(all_deviances, 1, function(x) {sd(x)/sqrt(nfold)})
-    plot.dat <- data.frame(lambdagrid = lambdagrid, mean.dev = mean_dev, 
-                           upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
-    p <- ggplot2::ggplot(plot.dat, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() +  geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, position=position_dodge(0.05), colour = "grey") + labs(x = "log(lambda)", y = "Multinomial Deviance")  + geom_vline(xintercept = log(lambda.min), linetype = "dotted", colour = "blue") + geom_vline(xintercept = log(lambda.1se), linetype = "dotted", colour = "blue")
-  }
-  return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs,
-              lambda.1se = lambda.1se, cv.se = cv_se, plot.cv = p))
+  return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
+              lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances))
+}
+
+#' ###########################################################
+#' Plotting function for cross-validation 
+plot_cv.multinom <- function(all_deviances, lambdagrid, lambda.min, lambda.1se, nfold = 10) {
+  mean_dev <- rowMeans(all_deviances)
+  row_stdev <- apply(all_deviances, 1, function(x) {sd(x)/sqrt(nfold)})
+  plot.dat <- data.frame(lambdagrid = lambdagrid, mean.dev = mean_dev, 
+                         upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
+  p <- ggplot(plot.dat, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() +  geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, position=position_dodge(0.05), colour = "grey") + labs(x = "log(lambda)", y = "Multinomial Deviance")  + geom_vline(xintercept = log(lambda.min), linetype = "dotted", colour = "blue") + 
+    geom_vline(xintercept = log(lambda.1se), linetype = "dotted", colour = "purple")
+  return(p)
 }
 
 
-###########################################################
-#' Absolute risk calculation for the casebase competing risks setting
+################### Function to calculate specificity, sensitivity and MCC ###############
+varsel_perc <- function(model_coef, true_coef) {
+  zero_ind1 <- which(true_coef == 0)
+  nonzero_ind1 <- which(true_coef != 0)
+  TP <- length(intersect(which(model_coef != 0), nonzero_ind1))
+  TN <- length(intersect(which(model_coef == 0), zero_ind1))
+  FP <- length(intersect(which(model_coef != 0), zero_ind1))
+  FN <- length(intersect(which(model_coef == 0), nonzero_ind1))
+  sens <- TP/(TP+FN)
+  spec <- TN/(TN+FP)
+  mcc_num <- (TP*TN)-(FP*FN)
+  mcc_den <- (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
+  mcc <- mcc_num/sqrt(mcc_den)
+  dat <- as.data.frame(cbind(TP = TP, TN = TN, FP = FP, FN = FN, Sensitivity = sens, Specificity = spec, MCC = mcc))
+  return(dat)
+}
 
+
+#' ###########################################################
+#' #' Bootstrapping function for standard error of multinomial deviance
+#' bootstrap_cvse <- function(x, y, alpha = alpha, B = B, lambdagrid, test_cv){
+#' cvse <- replicate(B, {
+#'   train_index <- sample(1:nrow(x), replace = TRUE)
+#'   xboot <-  X[index, ]
+#'   yboot <- Y[index]
+#'   cvs_res <- mclapply(lambdagrid, function(lambda_val) {
+#'     lambda1 <- lambda_val*alpha
+#'     lambda2 <- 0.5*lambda_val*(1 - alpha)
+#'     # mtool.MNlogistic is too verbose...
+#'     mtool::mtool.MNlogistic(
+#'       X = as.matrix(xboot),
+#'       Y = yboot,
+#'       offset = train_cv$offset,
+#'       N_covariates = constant_covariates,
+#'       regularization = 'elastic-net',
+#'       transpose = FALSE,
+#'       lambda1 = lambda1, lambda2 = lambda2, 
+#'       lambda3 = 0)
+#'   }, mc.cores = 4)
+#' mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
+#' all_deviances[, i] <- mult_deviance
+#' mean_dev <- rowMeans(all_deviances)
+#' })
+#' }
