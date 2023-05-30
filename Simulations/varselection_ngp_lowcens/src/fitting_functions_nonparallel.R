@@ -209,11 +209,36 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
                      "event_ind" = train_cv$event_ind,
                      "covariates" = train_cv[, grepl("covariates", names(train_cv))],
                      "offset" = train_cv$offset)
-    cvs_res <- lapply(lambdagrid, 
-                        function(lambda_val) {
-                          fit_cbmodel(train_cv, regularization = 'elastic-net',
-                                      lambda = lambda_val, alpha = alpha)
-                        })
+    # Set the number of cores to be used for parallel processing
+    num_cores <- availableCores()-4  # Adjust the number of cores as per your system's capacity
+    # Create a parallel cluster using the specified number of cores
+    cl <- makeCluster(num_cores)
+    
+    clusterEvalQ(cl, source("../src/fitting_functions_nonparallel.R"))
+    
+    # Export multiple objects to all clusters
+    objects_to_export <- c("train_cv", "lambdagrid", "test_cv", "alpha")
+    clusterExport(cl, objects_to_export)
+    
+    # Load necessary packages on each cluster
+    clusterEvalQ(cl, {
+      library(casebase)
+      library(future.apply)
+      library(mtool)
+      library(parallel)
+      library(dplyr)
+    })
+    
+    # Define the function to be applied in parallel
+    fit_cbmodel_parallel <- function(lambda_val) {
+      fit_cbmodel(train_cv, regularization = 'elastic-net', lambda = lambda_val, alpha = alpha)
+    }
+    
+    # Use parLapply to perform parallel processing
+    cvs_res <- parLapply(cl, lambdagrid, fit_cbmodel_parallel)
+    
+    # Stop the parallel cluster
+    stopCluster(cl)
     test_cv <- list("time" = test_cv$time,
                     "event_ind" = test_cv$event_ind,
                     "covariates" = test_cv[, grepl("covariates", names(test_cv))],

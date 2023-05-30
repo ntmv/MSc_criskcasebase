@@ -70,7 +70,7 @@ cox_val <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 1,
 
 cc <- coef(cox_val)
 
-res_cox <- varsel_perc(cc, beta[[2]])
+res_cox <- varsel_perc(cc, beta[[1]])
 
 ################ Comparing case-base fit ###########################
 # Convert to case-base dataset
@@ -134,7 +134,7 @@ res_cb_1se <- varsel_perc(fit_val_1se$coefficients[1:eval(parse(text="p")), 1], 
 ##########################################################################
 Res <- rbind(res_cb_min, res_cb_1se, res_cb_0.5se, res_cb_min0.5se, res_cb_min1se, res_cox)
 
-write.csv(Res, file = paste0(runif(1), "iid_sparse.csv"))
+write.csv(Res, file = paste0(runif(1), "cor_midsparse.csv"))
 
 png(filename = paste0(runif(1), "cv.png"), height = 15, width = 20, res = 300, units = "cm")
 p1

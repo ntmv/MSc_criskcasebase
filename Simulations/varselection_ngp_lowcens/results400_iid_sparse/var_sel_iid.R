@@ -69,7 +69,7 @@ cox_val <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 1,
 
 cc <- coef(cox_val)
 
-res_cox <- varsel_perc(cc, beta[[2]])
+res_cox <- varsel_perc(cc, beta[[1]])
 
 ################ Comparing case-base fit ###########################
 # Convert to case-base dataset
