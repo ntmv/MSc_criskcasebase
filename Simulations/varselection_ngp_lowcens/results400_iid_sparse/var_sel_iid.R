@@ -9,6 +9,7 @@ library(tictoc)
 library(tidyverse)
 library(riskRegression)
 library(cmprsk)
+library(survsim)
 
 # Fitting functions 
 source("../src/fitting_functions_nonparallel.R")

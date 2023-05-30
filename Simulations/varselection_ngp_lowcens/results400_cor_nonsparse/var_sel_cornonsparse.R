@@ -22,7 +22,7 @@ anc.ev <- c(0.8, 0.3)
 beta0.ev <- c(0.1, 0.1)
 
 # Generating survival data 
-sim.data <- crisk.sim(n = n, p = p, rho = 0.5, foltime = 4, dist.ev = dist.ev, 
+sim.data <- crisk.sim_mvn(n = n, p = p, rho = 0.5, foltime = 4, dist.ev = dist.ev, 
                       anc.ev = anc.ev, beta0.ev = beta0.ev, beta0.cens = 0.05, anc.cens = 4, nsit = 2, 
                       beta = beta)
 
@@ -44,9 +44,9 @@ cif
 
 #################################################################
 # Split into training and validation sets (stratified)
-train.index <- caret::createDataPartition(sim.dat$status, p = 0.80, list = FALSE)
-train <- sim.dat[train.index,]
-test <- sim.dat[-train.index,]
+train.index <- caret::createDataPartition(sim.data$status, p = 0.80, list = FALSE)
+train <- sim.data[train.index,]
+test <- sim.data[-train.index,]
 ######################### Cause-specific proportional hazards model ###############
 # Censor competing event
 y_train <- Surv(time = train$time, event = train$status == 1)

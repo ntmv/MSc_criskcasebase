@@ -9,6 +9,7 @@ library(tictoc)
 library(tidyverse)
 library(riskRegression)
 library(cmprsk)
+library(survsim)
 
 # Fitting functions 
 source("../src/fitting_functions_nonparallel.R")
@@ -46,9 +47,9 @@ cif
 
 #################################################################
 # Split into training and validation sets (stratified)
-train.index <- caret::createDataPartition(sim.dat$status, p = 0.80, list = FALSE)
-train <- sim.dat[train.index,]
-test <- sim.dat[-train.index,]
+train.index <- caret::createDataPartition(sim.data$status, p = 0.80, list = FALSE)
+train <- sim.data[train.index,]
+test <- sim.data[-train.index,]
 ######################### Cause-specific proportional hazards model ###############
 # Censor competing event
 y_train <- Surv(time = train$time, event = train$status == 1)
