@@ -210,9 +210,9 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
                      "covariates" = train_cv[, grepl("covariates", names(train_cv))],
                      "offset" = train_cv$offset)
     # Set the number of cores to be used for parallel processing
-    num_cores <- availableCores()-4  # Adjust the number of cores as per your system's capacity
+    num_cores <- parallelly::availableCores()  # Adjust the number of cores as per your system's capacity
     # Create a parallel cluster using the specified number of cores
-    cl <- makeCluster(num_cores)
+    cl <-  parallel::makeCluster(num_cores, setup_strategy = "sequential")
     
     clusterEvalQ(cl, source("../src/fitting_functions_nonparallel.R"))
     
