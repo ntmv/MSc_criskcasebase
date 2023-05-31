@@ -13,8 +13,8 @@ do
      RUNSCRIPTS=~/projects/def-gcohenfr/ntamvada/simulations/runscripts/n400_iid_nonsparse
      LOGS=~/projects/def-gcohenfr/ntamvada/simulations/logs/n400_iid_nonsparse
 echo "#!/bin/bash
-#SBATCH --time=5:00:00
-#SBATCH --mem-per-cpu=8GB
+#SBATCH --time=10:00:00
+#SBATCH --mem=128GB
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
 #SBATCH --output=${LOGS}/${ID}.std_out.2.txt
