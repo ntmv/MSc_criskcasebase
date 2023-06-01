@@ -239,7 +239,7 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
                     "event_ind" = test_cv$event_ind,
                     "covariates" = test_cv[, grepl("covariates", names(test_cv))],
                     "offset" = test_cv$offset)
-    mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
+    mult_deviance <- unlist(lapply(cv_res, multi_deviance, cb_data = test_cv))
     all_deviances[, i] <- mult_deviance
     mean_dev <- rowMeans(all_deviances)
     lambda.min <- lambdagrid[which.min(mean_dev)]
