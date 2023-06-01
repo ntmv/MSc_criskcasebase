@@ -172,11 +172,11 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
     if(is.null(initial_max_grid)) {
       initial_max_grid <- 
         c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
-      fit_val_max <- lapply(initial_max_grid, 
+      fit_val_max <- mclapply(initial_max_grid, 
                               function(lambda_val) {
                                 fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                            lambda = lambda_val, alpha = alpha)})
-      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
+                                            lambda = lambda_val, alpha = alpha)}, mc.cores = 4)
+      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}), mc.cores = 4)
       if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
         warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
       }
@@ -187,7 +187,7 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
                                function(lambda_val) {
                                  fit_cbmodel(cb_data_train, regularization = 'elastic-net',
                                              lambda = lambda_val, alpha = alpha)})
-      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
+      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = 4))
       lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
     }
   }
@@ -231,15 +231,15 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
                      "offset" = train_cv$offset)
     
     # Define the function to be applied in parallel
-    cv_res <- lapply(lambdagrid, function(lambda_val) {
+    cv_res <- mclapply(lambdagrid, function(lambda_val) {
       fit_cbmodel(train_cv, regularization = 'elastic-net', lambda = lambda_val, alpha = alpha)
-    })
+    }, mc.cores = 4)
     
     test_cv <- list("time" = test_cv$time,
                     "event_ind" = test_cv$event_ind,
                     "covariates" = test_cv[, grepl("covariates", names(test_cv))],
                     "offset" = test_cv$offset)
-    mult_deviance <- unlist(lapply(cv_res, multi_deviance, cb_data = test_cv))
+    mult_deviance <- unlist(mclapply(cv_res, multi_deviance, cb_data = test_cv, mc.cores = 4))
     all_deviances[, i] <- mult_deviance
     mean_dev <- rowMeans(all_deviances)
     lambda.min <- lambdagrid[which.min(mean_dev)]
@@ -252,7 +252,7 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
     range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
     lambda.0.5se <- tail(range.0.5se, n = 1)
     lambda.min0.5se <- range.0.5se[1]
-    non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
+    non_zero_coefs[, i] <-  unlist(lapply(cv_res, function(x) {return(x$no_non_zero)}))
     rownames(all_deviances) <- lambdagrid
     rownames(non_zero_coefs) <- lambdagrid
   }

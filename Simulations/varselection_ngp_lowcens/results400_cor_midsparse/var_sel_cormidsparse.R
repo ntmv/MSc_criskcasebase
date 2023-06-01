@@ -134,6 +134,11 @@ res_cb_1se <- varsel_perc(fit_val_1se$coefficients[1:eval(parse(text="p")), 1], 
 ##########################################################################
 Res <- rbind(res_cb_min, res_cb_1se, res_cb_0.5se, res_cb_min0.5se, res_cb_min1se, res_cox)
 
+
+rownames(Res) <- c("casebase.lambda.min", "casebase.lambda.1se", "casebase.lambda.0.5se",
+                   "casebase.lambda.min0.5se", "casebase.lambda.min1se", "cox")
+
+
 write.csv(Res, file = paste0(runif(1), "cor_midsparse.csv"))
 
 png(filename = paste0(runif(1), "cv.png"), height = 15, width = 20, res = 300, units = "cm")
