@@ -79,7 +79,7 @@ cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log
 cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio = 10)
 
 tic()
-cv.alpha <- mtool.multinom.cv(cb_data_train, lambda_max = 0.3, alpha = 1, nfold = 10)
+cv.alpha <- mtool.multinom.cv(cb_data_train, lambda_max = 0.3, alpha = 1, nfold = 5)
 toc()
 
 cv.alpha
