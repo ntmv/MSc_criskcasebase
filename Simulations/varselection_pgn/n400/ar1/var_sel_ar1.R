@@ -36,9 +36,9 @@ beta0.ev <- c(0.1, 0.1)
 
 
 # Generating survival data 
-sim.data <- crisk.sim(foltime = 4, dist.ev = dist.ev, 
+sim.data <- crisk.sim_mvn(n = n, p = p, rho = 0.5, foltime = 4, dist.ev = dist.ev, 
                       anc.ev = anc.ev, beta0.ev = beta0.ev, beta0.cens = 0.05, anc.cens = 4, nsit = 2, 
-                      beta = beta, x = x, n = n)
+                      beta = beta)
 
 # fix status variable
 sim.data$cause <- with(sim.data, ifelse(is.na(sim.data$cause), 0, sim.data$cause))
