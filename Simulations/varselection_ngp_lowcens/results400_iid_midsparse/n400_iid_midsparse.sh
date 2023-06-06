@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --job-name="batch_n400iid_midsparse"
 
-for i in {1..1000}
+for i in {1..200}
 
 do
      ID=${i}

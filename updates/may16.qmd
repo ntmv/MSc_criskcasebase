@@ -183,8 +183,8 @@ library(tidyverse)
 library(data.table)
 
 # Read in all the output read files 
-path <- "~/Desktop/results_pgn_iid_sparse"
-copynum.files <- dir(path, pattern = "*iidsparse.csv$")
+path <- "~/Desktop/ResearchMasters/MSc_criskcasebase/Simulations/varselection_ngp_lowcens/results400_iid_nonsparse"
+copynum.files <- dir(path, pattern = "*iid_nonsparse.csv$")
 
 # Nested data frame with file names 
 iid_sparse_dat <- tibble(filename = copynum.files) %>%
@@ -196,19 +196,20 @@ iid_sparse_dat <- unnest(iid_sparse_dat, cols = c(file_contents))
 
 iid_sparse_dat <- iid_sparse_dat %>%
   select(-filename) %>%
-  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
   mutate(cor_setting = rep("IID", nrow(iid_sparse_dat))) %>%
   mutate(sparse_setting = rep( "Sparse", nrow(iid_sparse_dat)))
 
 
 # Read in all the output read files 
-path <- "~/Desktop/results_pgn_cor_sparse"
+path <- "~/Desktop/results_pgn_cor_nonsparse"
 copynum.files <- dir(path, pattern = "*corsparse.csv$")
 
 # Nested data frame with file names 
 cor_sparse_dat <- tibble(filename = copynum.files) %>%
   mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
   )
+
+colnames(iid_sparse_dat)[1] <- "Model"
 
 # Unnest nested dataframe
 cor_sparse_dat <- unnest(cor_sparse_dat, cols = c(file_contents))
@@ -238,14 +239,14 @@ pgn_res <- read.csv("pgn_res.csv")
 
 pgn_res <- pgn_res[,-1]
 
-pgn_res_stats <- pgn_res %>%
-  group_by(Model, cor_setting, sparse_setting) %>%
-  summarise(mean_sp = mean(Sp), mean_se = mean(Se), 
-            median_sp = median(Sp), median_se = median(Se),
-            se_sp = sd(Sp), se_se = sd(Se), miss_se = sum(Se == 0)/n(), 
-            miss_sp = sum(Sp == 0)/n(), iqr_sp = IQR(Sp), iqr_se = IQR(Se), 
-            max_sp = max(Sp), max_se = max(Se), perc_se = sum(Se > 0.60)/n(), 
-            perc_sp = sum(Sp > 0.60)/n())
+pgn_res_stats <- iid_sparse_dat %>%
+  group_by(Model) %>%
+  summarise(mean_sp = mean(Specificity), mean_se = mean(Sensitivity), 
+            median_sp = median(Specificity), median_se = median(Sensitivity),
+            se_sp = sd(Specificity), se_se = sd(Sensitivity), miss_se = sum(Sensitivity == 0)/n(), 
+            miss_sp = sum(Specificity == 0)/n(), iqr_sp = IQR(Specificity), iqr_se = IQR(Sensitivity), 
+            max_sp = max(Specificity), max_se = max(Sensitivity), perc_se = sum(Sensitivity >= 0.40)/n(), 
+            perc_sp = sum(Specificity >= 0.40)/n())
 
 pgn_res_stats <- pgn_res_stats %>%
   mutate_if(is.numeric, round, digits = 3) %>%

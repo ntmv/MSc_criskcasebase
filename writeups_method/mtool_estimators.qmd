@@ -243,9 +243,9 @@ Fitting the two models (`nnet` does not provide a penalized implementation of th
     family = "multinomial",
     intercept = FALSE,
     type.multinomial = "grouped",  # same sparsity pattern for all outcome classes
-    lambda = 0.1, alpha = 0.5)
+    lambda = 0.1, alpha = 0)
    # Elastic-net reparametrization
-  alpha <- 0.5
+  alpha <- 0
   lambda <- 0.1
   lambda1 <- lambda*alpha
   lambda2 <- 0.5*lambda*(1 - alpha)

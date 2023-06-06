@@ -16,16 +16,15 @@ source("../src/fitting_functions_nonparallel.R")
 
 n <- 400
 p <- 20
-beta <- list(c(0.5, rep(0, 18), 0.5),c(0.2, rep(0, 18), 0.2))
+beta <- list(c(0.5, rep(0, 8), 0.5, rep(0, 10)), c(0.2, rep(0, 8), 0.2, rep(0, 10)))
 dist.ev <- c("weibull", "weibull")
 anc.ev <- c(0.8, 0.3)
 beta0.ev <- c(0.1, 0.1)
-x <- rep(list(c("normal", 0, 1)), p)
 
 # Generating survival data 
-sim.data <- crisk.sim(foltime = 4, dist.ev = dist.ev, 
+sim.data <- crisk.sim_block(n =n, p = p, nblocks = 4, foltime = 4, dist.ev = dist.ev, 
                           anc.ev = anc.ev, beta0.ev = beta0.ev, beta0.cens = 0.05, anc.cens = 4, nsit = 2, 
-                          beta = beta, x = x, n = n)
+                          beta = beta)
 
 # fix status variable
 sim.data$cause <- with(sim.data, ifelse(is.na(sim.data$cause), 0, sim.data$cause))
@@ -178,7 +177,7 @@ rownames(Res) <- c("casebase.lambda.min", "casebase.lambda.1se", "casebase.lambd
                    "cox.lambda.1se",  "cox.lambda.0.5se", "cox.lambda.min1se",
                    "cox.lambda.min0.5se")
 
-write.csv(Res, file = paste0(runif(1), "iid_sparse.csv"))
+write.csv(Res, file = paste0(runif(1), "block_sparse.csv"))
 
 png(filename = paste0(runif(1), "cv.png"), height = 15, width = 20, res = 300, units = "cm")
 p1

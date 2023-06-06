@@ -59,6 +59,75 @@ crisk.sim_mvn <-
   }
 
 #########################################################
+# Survsim's function modified for block correlations
+crisk.sim_block <-
+  function (n, p, nblocks, foltime, dist.ev, anc.ev, beta0.ev, dist.cens = "weibull", 
+            anc.cens, beta0.cens, z = NULL, beta = NA, nsit) 
+  {
+    # Arguments check
+    if (length(anc.ev) != length(beta0.ev)) stop("Wrong number of parameters")
+    if (length(anc.cens) != length(beta0.cens) && length(anc.cens) != 1) stop("Wrong number of parameters")
+    if (length(anc.ev) != length(dist.ev)) stop("Wrong number of parameters")
+    #if ( all(is.na(beta))) stop("Wrong specification of covariables")
+    #if (any(!is.na(beta))) stop("Wrong specification of covariables")
+    if (length(beta0.ev) != nsit) stop("Wrong number of distributions or events")
+    if (!is.null(z) && length(z) != nsit && length(z) != 1) stop("Wrong numbers of elements in z")
+    if (!is.null(z) && !all(lapply(z, function(x) x[1]) %in% c("unif","weibull","invgauss", "gamma","exp"))) 
+      stop("Wrong specification of z")
+    if (!is.null(z) && any(lapply(z, function(x) length(x)) != 3))
+    {
+      if(any(lapply(z[lapply(z, function(x) length(x)) != 3], function(x) length(x)) != 2)) stop("Wrong specification of z")
+      if(any(lapply(z[lapply(z, function(x) length(x)) != 3], function(x) length(x)) == 2))
+      {
+        for (i in 1:length(z[lapply(z, function(x) length(x)) == 2]))
+        {
+          if (z[lapply(z, function(x) length(x)) != 3][[i]][1] != "exp") stop("Wrong specification of z")
+        }
+      }
+    }
+    if(!is.null(z) && any(lapply(z, function(x) x[1]) == "unif"))
+    {
+      for (i in 1:length(z[lapply(z, function(x) x[1]) == "unif"]))
+      {
+        if (as.numeric(z[lapply(z, function(x) x[1]) == "unif"][[i]][2])-as.numeric(z[lapply(z, function(x) x[1]) == "unif"][[i]][3]) >= 0) 
+          stop("Wrong specification of z")
+        if (as.numeric(z[lapply(z, function(x) x[1]) == "unif"][[i]][2]) < 0) stop("Wrong specification of z")
+      }
+    }
+    
+    sim.data <- list()
+    eff <- vector()
+    eff[1] <- 0
+    # Set the number of variables per block
+    vpb <- p/nblocks
+    # Set the correlation values for each covariate block
+    correlation_values <- c(0.5, 0.35, 0.05, 0.32)
+    # Initialize empty matrix
+    correlation_matrix <- matrix(0, nrow = p, ncol = p)
+    # Generate the covariance matrix with block correlations
+    for (i in 1:nblocks) {
+      start_index <- (i - 1) * vpb + 1
+      end_index <- i * vpb
+      correlation_matrix[start_index:end_index, start_index:end_index] <- correlation_values[i]
+    }
+    # Diagonal elements should be 1
+    diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
+    
+    for (i in 1:n) {
+      eff <- mvtnorm::rmvnorm(1, sigma = correlation_matrix)
+      
+      sim.data[[i]] <- survsim::crisk.ncens.sim(foltime, anc.ev, beta0.ev, anc.cens, beta0.cens, z, beta, eff, 
+                                                dist.ev, dist.cens, i, nsit)
+    }
+    sim.data <- do.call(rbind, sim.data)
+    sim.data$cause[sim.data$status==0] <- NA
+    class(sim.data) <- c("crisk.data.sim", "data.frame")
+    attr(sim.data, "n") <- n
+    attr(sim.data, "foltime") <- foltime
+    attr(sim.data, "nsit") <- nsit
+    return(sim.data)
+  }
+#####################################################################
 #' Multinomial deviance
 #' 
 #' @param cb_data Output of \code{create_cbDataset}
@@ -222,15 +291,15 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
     all_deviances[, i] <- mult_deviance
     mean_dev <- rowMeans(all_deviances)
     lambda.min <- lambdagrid[which.min(mean_dev)]
-    cv_se <- sqrt(var(mean_dev)/nfold)
+    cv_se <- sqrt(var(mean_dev))
     dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
     dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
     range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
-    lambda.1se <- tail(range.1se, n = 1)
-    lambda.min1se <- range.1se[1]
+    lambda.1se <- max(range.1se)
+    lambda.min1se <- min(range.1se)
     range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
-    lambda.0.5se <- tail(range.0.5se, n = 1)
-    lambda.min0.5se <- range.0.5se[1]
+    lambda.0.5se <- max(range.0.5se)
+    lambda.min0.5se <- min(range.0.5se)
     non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
     rownames(all_deviances) <- lambdagrid
     rownames(non_zero_coefs) <- lambdagrid
@@ -263,8 +332,10 @@ varsel_perc <- function(model_coef, true_coef) {
   sens <- TP/(TP+FN)
   spec <- TN/(TN+FP)
   mcc_num <- (TP*TN)-(FP*FN)
-  mcc_den <- (TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)
-  mcc <- mcc_num/sqrt(mcc_den)
+  # To avoid numerical overflow issues 
+  mcc_den1 <- as.numeric((TP+FP)*(TP+FN))
+  mcc_den2 <- as.numeric((TN+FP)*(TN+FN))
+  mcc <- mcc_num/sqrt(mcc_den1*mcc_den2)
   dat <- as.data.frame(cbind(TP = TP, TN = TN, FP = FP, FN = FN, Sensitivity = sens, Specificity = spec, MCC = mcc))
   return(dat)
 }
