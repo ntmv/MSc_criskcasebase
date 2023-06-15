@@ -57,7 +57,7 @@ absoluteRisk.CompRisk <- function(object, time, newdata,
       newdata2[, object@timeVar := knots]
       newdata2[, "offset" := 0]
       # Compute all values for all hazards
-      lambdas <- exp(predict_CompRisk(object, newdata2))
+      lambdas <- exp(predict_CompRisk(object, newdata2)) 
       lambdas[which(lambdas %in% c(Inf, -Inf))] <- 0
       OverallLambda <- rowSums(lambdas)
       survFunction <- exp(-trap_int(knots, OverallLambda))

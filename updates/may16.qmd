@@ -4,6 +4,153 @@ format: pdf
 editor: visual
 ---
 
+```{r}
+# Libraries 
+library(readr)
+library(purrr)
+library(tidyverse)
+library(data.table)
+
+# Read in all the output read files 
+path <- "~/Desktop/ResearchMasters/MSc_criskcasebase/Simulations/varselection_ngp_lowcens/results400_iid_sparse"
+copynum.files <- dir(path, pattern = "*iidsparse.csv$")
+
+# Nested data frame with file names 
+iid_sparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+iid_sparse_dat <- unnest(iid_sparse_dat, cols = c(file_contents))
+
+iid_sparse_dat <- iid_sparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("IID", nrow(iid_sparse_dat))) %>%
+  mutate(sparse_setting = rep( "Sparse", nrow(iid_sparse_dat)))
+
+
+# Read in all the output read files 
+path <- "~/Desktop/results_iid_midsparse"
+copynum.files <- dir(path, pattern = "*iidmidsparse.csv$")
+
+# Nested data frame with file names 
+iid_midsparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+iid_midsparse_dat <- unnest(iid_midsparse_dat, cols = c(file_contents))
+
+iid_midsparse_dat <- iid_midsparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("IID", nrow(iid_midsparse_dat))) %>%
+  mutate(sparse_setting = rep( "MidSparse", nrow(iid_midsparse_dat)))
+
+# Read in all the output read files 
+path <- "~/Desktop/results_iid_nonsparse"
+copynum.files <- dir(path, pattern = "*iidnonsparse.csv$")
+
+# Nested data frame with file names 
+iid_nonsparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+iid_nonsparse_dat <- unnest(iid_nonsparse_dat, cols = c(file_contents))
+
+iid_nonsparse_dat <- iid_nonsparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("IID", nrow(iid_nonsparse_dat))) %>%
+  mutate(sparse_setting = rep( "MidSparse", nrow(iid_nonsparse_dat)))
+
+
+# Read in all the output read files 
+path <- "~/Desktop/results_iid_nonsparse"
+copynum.files <- dir(path, pattern = "*iidnonsparse.csv$")
+
+# Nested data frame with file names 
+iid_nonsparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+iid_nonsparse_dat <- unnest(iid_nonsparse_dat, cols = c(file_contents))
+
+iid_nonsparse_dat <- iid_nonsparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("IID", nrow(iid_nonsparse_dat))) %>%
+  mutate(sparse_setting = rep( "NonSparse", nrow(iid_nonsparse_dat)))
+
+
+
+# Read in all the output read files 
+path <- "~/Desktop/results_cor_sparse"
+copynum.files <- dir(path, pattern = "*corsparse.csv$")
+
+# Nested data frame with file names 
+cor_sparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+cor_sparse_dat <- unnest(cor_sparse_dat, cols = c(file_contents))
+
+cor_sparse_dat <- cor_sparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("AR(1)", nrow(cor_sparse_dat))) %>%
+  mutate(sparse_setting = rep( "Sparse", nrow(cor_sparse_dat)))
+
+# Read in all the output read files 
+path <- "~/Desktop/results_cor_midsparse"
+copynum.files <- dir(path, pattern = "*cormidsparse.csv$")
+
+# Nested data frame with file names 
+cor_midsparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+cor_midsparse_dat <- unnest(cor_midsparse_dat, cols = c(file_contents))
+
+cor_midsparse_dat <- cor_midsparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("AR(1)", nrow(cor_midsparse_dat))) %>%
+  mutate(sparse_setting = rep( "MidSparse", nrow(cor_midsparse_dat)))
+
+
+# Read in all the output read files 
+path <- "~/Desktop/results_cor_nonsparse"
+copynum.files <- dir(path, pattern = "*cornonsparse.csv$")
+
+# Nested data frame with file names 
+cor_nonsparse_dat <- tibble(filename = copynum.files) %>%
+  mutate(file_contents = map(filename, ~ read_csv(file.path(path, .)))
+  )
+
+# Unnest nested dataframe
+cor_nonsparse_dat <- unnest(cor_nonsparse_dat, cols = c(file_contents))
+
+cor_nonsparse_dat <- cor_nonsparse_dat %>%
+  select(-filename) %>%
+  rename("Model" = ...1, "Sp" = V1, "Se" = V2, "FPR" = V3, "FNR" = V4) %>%
+  mutate(cor_setting = rep("AR(1)", nrow(cor_nonsparse_dat))) %>%
+  mutate(sparse_setting = rep( "NonSparse", nrow(cor_nonsparse_dat)))
+
+
+nlessthanp_res <- rbind(iid_sparse_dat, iid_midsparse_dat, iid_nonsparse_dat, cor_sparse_dat, cor_midsparse_dat, cor_nonsparse_dat)
+
+nlessthanp_res <- nlessthanp_res %>%
+  mutate(Model = ifelse(Model == "res_bm", "aLASSO1-Binomial", "LASSO-Casebase"))
+
+write.csv(nlessthanp_res, file = "~/Desktop/nlessthanp_res.csv")
+```
+
 ## Simulation Settings
 
 -   Data generated from two proportional hazards models:

@@ -1,7 +1,0 @@
-"","TP","TN","FP","FN","Sensitivity","Specificity","MCC"
-"casebase.lambda.min",6,5,5,4,0.6,0.5,0.100503781525921
-"casebase.lambda.1se",3,8,2,7,0.3,0.8,0.115470053837925
-"casebase.lambda.0.5se",6,8,2,4,0.6,0.8,0.408248290463863
-"casebase.lambda.min0.5se",8,4,6,2,0.8,0.4,0.218217890235992
-"casebase.lambda.min1se",8,2,8,2,0.8,0.2,0
-"cox",6,3,7,4,0.6,0.3,-0.104828483672192
