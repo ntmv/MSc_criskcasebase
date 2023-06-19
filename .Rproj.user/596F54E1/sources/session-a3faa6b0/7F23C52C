@@ -1,0 +1,26 @@
+{
+    "id": "7F23C52C",
+    "path": "~/dev/casebase_relaxed_LASSO/sample_script/src/fitting_functions.R",
+    "project_path": "sample_script/src/fitting_functions.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1689106737523.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "214,53",
+        "scrollLine": "198"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1689106686,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1689106686,
+    "read_only": false,
+    "read_only_alternatives": []
+}

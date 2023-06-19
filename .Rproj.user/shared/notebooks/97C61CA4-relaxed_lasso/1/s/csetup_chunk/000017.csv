@@ -1,0 +1,77 @@
+"0","library(casebase)"
+"0","library(future.apply)"
+"0","library(glmnet)"
+"0","#library(mtool)"
+"0","library(parallelly)"
+"0","library(timereg)"
+"0","library(parallel)"
+"0","library(tictoc)"
+"0","library(tidyverse)"
+"0","library(cmprsk)"
+"0","library(survsim)"
+"0","library(caret)"
+"0","library(Matrix)"
+"0","#install.packages(c(""matrixCalc""))"
+"0","install.packages( ""/Users/alex/Downloads/lmvar_1.5.2.tar.gz"", repos=NULL, type=""source"")"
+"2","* installing *source* package ‘lmvar’ ...
+"
+"2","** package ‘lmvar’ successfully unpacked and MD5 sums checked
+"
+"2","** using staged installation
+"
+"2","** R
+"
+"2","** inst
+"
+"2","** byte-compile and prepare package for lazy loading
+"
+"2","** help
+"
+"2","*** installing help indices
+"
+"2","** building package indices
+"
+"2","** installing vignettes
+"
+"2","** testing if installed package can be loaded from temporary location
+"
+"2","** testing if installed package can be loaded from final location
+"
+"2","** testing if installed package keeps a record of temporary installation path
+"
+"2","* DONE (lmvar)
+"
+"0","library(lmvar)"
+"0",""
+"0","# Fitting functions "
+"0","#source(""src/fitting_functions.R"")"
+"0","# Helper functions"
+"0","source(""src/helper_functions.R"")"
+"2","* installing *source* package ‘lmvar’ ...
+"
+"2","** package ‘lmvar’ successfully unpacked and MD5 sums checked
+"
+"2","** using staged installation
+"
+"2","** R
+"
+"2","** inst
+"
+"2","** byte-compile and prepare package for lazy loading
+"
+"2","** help
+"
+"2","*** installing help indices
+"
+"2","** building package indices
+"
+"2","** installing vignettes
+"
+"2","** testing if installed package can be loaded from temporary location
+"
+"2","** testing if installed package can be loaded from final location
+"
+"2","** testing if installed package keeps a record of temporary installation path
+"
+"2","* DONE (lmvar)
+"
