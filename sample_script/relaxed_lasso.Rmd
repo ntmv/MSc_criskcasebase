@@ -131,7 +131,7 @@ coefficient_names = c("Model fitting procedure", coefficient_names)
 
 coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names) + 1))
 colnames(coefficient_values) = coefficient_names
-model_fit_labels = c("CV, lambda min, relax = TRUE", "CV, lambda 1se, relax = TRUE", "lasso noCV, lambda 1se from relax = TRUE, relax = FALSE, then ridge", "lasso CV, lambda 1se from CV, relax = FALSE, then ridge", "lasso noCV, lambda 1se from relax = TRUE, relax = FALSE, then OLS", "lasso CV, lambda 1se from CV, relax = FALSE, then OLS", "lasso noCV relax = FALSE, then OLS fit on selected predictors from every lambda", "lasso CV relax = FALSE, then OLS fit on selected predictors from every lambda")
+model_fit_labels = c("CV, lambda min, relax = TRUE", "CV, lambda 1se, relax = TRUE", "lasso noCV relax = FALSE, then OLS fit on selected predictors from every lambda", "lasso CV relax = FALSE, then OLS fit on selected predictors from every lambda")
 
 ### Fit lasso with lambda value found during cross validation, then OLS
 
@@ -176,143 +176,6 @@ coefficient_values = rbind(coefficient_values, c(0, lapply(coef_cv_fit_relaxed_m
 colnames(coefficient_values) = coefficient_names
 ```
 
-
-### Fit lasso with lambda 1se value as was found during cross validation using relax = TRUE, then ridge
-
-``` {r lasso-same-lambda-then-ridge, echo = FALSE}
-set.seed(2023)
-fit_lasso_same_lambda = glmnet(x_train, y_train, family="gaussian", alpha=1, lambda = cv_lambda_relaxed_1se)
-
-coef_fit_lasso_same_lambda = as.data.frame.matrix(coef(fit_lasso_same_lambda))[-1, ]
-non_zero_coef = coef_fit_lasso_same_lambda[coef_fit_lasso_same_lambda != 0]
-
-non_zero_coef_lasso_same_lambda_indeces = which(coef_fit_lasso_same_lambda %in% non_zero_coef)
-
-new_x_train = x_train[, non_zero_coef_lasso_same_lambda_indeces]
-
-fit_lasso_then_ridge_same_lambda <- glmnet(new_x_train, y_train, family="gaussian", alpha=0)
-coef_lasso_then_ridge_same_lambda = coef(fit_lasso_then_ridge_same_lambda)
-
-coef_lasso_then_ridge_same_lambda_final = rep(0, 20)
-
-j = 1
-for (i in c(1:20)) {
-  if (i %in% non_zero_coef_lasso_same_lambda_indeces){
-    coef_lasso_then_ridge_same_lambda_final[i] = non_zero_coef[j]
-    j = j + 1
-  }
-}
-
-coefficient_values = rbind(coefficient_values, c(0, lapply(coef_lasso_then_ridge_same_lambda_final, function(x) round(x, 3))))
-colnames(coefficient_values) = coefficient_names
-```
-
-### Fit lasso with lambda value found during cross validation, then ridge
-
-``` {r lasso-cv-lambda-then-ridge, echo = FALSE}
-set.seed(2023)
-fit_lasso_cv_lambda = cv.glmnet(x_train, y_train, family="gaussian", alpha=1)
-
-coef_fit_lasso_cv_lambda = as.data.frame.matrix(coef(fit_lasso_cv_lambda))[-1, ]
-non_zero_coef = coef_fit_lasso_cv_lambda[coef_fit_lasso_cv_lambda != 0]
-
-# best_fit_index = fit_lasso_cv_lambda$index[2]
-# non_zero_coef_indeces = which(as.list(fit_lasso_cv_lambda$glmnet.fit$beta[, best_fit_index]) %in% non_zero_coef)
-non_zero_coef_lasso_cv_lambda_indeces = which(coef_fit_lasso_cv_lambda %in% non_zero_coef)
-
-new_x_train = x_train[, non_zero_coef_lasso_cv_lambda_indeces]
-
-fit_lasso_then_ridge_cv_lambda <- glmnet(new_x_train, y_train, family="gaussian", alpha=0)
-coef_lasso_then_ridge_cv_lambda = coef(fit_lasso_then_ridge_cv_lambda)
-
-
-coef_lasso_then_ridge_cv_lambda_final = rep(0, 20)
-
-j = 1
-for (i in c(1:20)) {
-  if (i %in% non_zero_coef_lasso_cv_lambda_indeces){
-    coef_lasso_then_ridge_cv_lambda_final[i] = non_zero_coef[j]
-    j = j + 1
-  }
-}
-
-coefficient_values = rbind(coefficient_values, c(0, lapply(coef_lasso_then_ridge_cv_lambda_final, function(x) round(x, 3))))
-colnames(coefficient_values) = coefficient_names
-```
-
-### Fit lasso with same lambda.min value as was found during cross validation using relax = TRUE, then OLS
-
-``` {r lasso-same-lambda-then-OLS, echo = FALSE}
-set.seed(2023)
-fit_lasso_same_lambda = glmnet(x_train, y_train, family="gaussian", alpha=1, lambda = cv_lambda_relaxed_1se)
-
-coef_lasso_same_lambda = as.data.frame.matrix(coef(fit_lasso_same_lambda))[-1, ]
-non_zero_coef_lasso_then_OLS_same_lambda = coef_lasso_same_lambda[coef_lasso_same_lambda != 0]
-
-non_zero_coef_lasso_then_OLS_same_lambda_indeces = which(coef_lasso_same_lambda %in% non_zero_coef_lasso_then_OLS_same_lambda)
-
-new_x_train = x_train[, non_zero_coef_lasso_then_OLS_same_lambda_indeces]
-
-fit_lasso_then_OLS_same_lambda <- glmnet(new_x_train, y_train, family="gaussian", alpha=0, lambda=0)
-coef_lasso_then_OLS_same_lambda = coef(fit_lasso_then_OLS_same_lambda)
-
-fit_lasso_then_OLS_same_lambda_lm = lm(y_train~new_x_train)
-coef_lasso_then_OLS_same_lambda_lm = coef(fit_lasso_then_OLS_same_lambda_lm)
-
-coef_lasso_then_OLS_same_lambda_final = rep(0, 20)
-
-j = 1
-for (i in c(1:20)) {
-  if (i %in% non_zero_coef_lasso_then_OLS_same_lambda_indeces){
-    coef_lasso_then_OLS_same_lambda_final[i] = non_zero_coef_lasso_then_OLS_same_lambda[j]
-    j = j + 1
-  }
-}
-
-coefficient_values = rbind(coefficient_values, c(0, lapply(coef_lasso_then_OLS_same_lambda_final, function(x) round(x, 3))))
-colnames(coefficient_values) = coefficient_names
-```
-
-### Fit lasso with lambda value found during cross validation, then OLS
-
-``` {r lasso-cv-lambda-then-OLS, echo = FALSE}
-set.seed(2023)
-fit_lasso_cv_lambda = cv.glmnet(x_train, y_train, family="gaussian", alpha=1)
-
-# fit_lasso_cv_lambda$lambda.min
-# 
-# try_relax_hopefully = glmnet(x_train, y_train, lambda=fit_lasso_cv_lambda$lambda.min)
-# coef(try_relax_hopefully)
-# 
-# coef(fit_lasso_cv_lambda, s="lambda.min")
-
-
-coef_fit_lasso_cv_lambda = as.data.frame.matrix(coef(fit_lasso_cv_lambda))[-1, ]
-non_zero_coef_lasso_cv_then_OLS = coef_fit_lasso_cv_lambda[coef_fit_lasso_cv_lambda != 0]
-
-# best_fit_index = fit_lasso_cv_lambda$index[2]
-# non_zero_coef_indeces = which(as.list(fit_lasso_cv_lambda$glmnet.fit$beta[, best_fit_index]) %in% non_zero_coef)
-non_zero_coef_lasso_cv_then_OLS_indeces = which(coef_fit_lasso_cv_lambda %in% non_zero_coef_lasso_cv_then_OLS)
-
-
-new_x_train = x_train[, non_zero_coef_lasso_cv_then_OLS_indeces]
-
-fit_lasso_then_OLS_cv_lambda <- glmnet(new_x_train, y_train, family="gaussian", alpha=0, lambda=0)
-coef_lasso_then_OLS_cv_lambda = coef(fit_lasso_then_OLS_cv_lambda)
-
-coef_lasso_then_OLS_cv_lambda_final = rep(0, 20)
-
-j = 1
-for (i in c(1:20)) {
-  if (i %in% non_zero_coef_lasso_cv_then_OLS_indeces){
-    coef_lasso_then_OLS_cv_lambda_final[i] = non_zero_coef_lasso_cv_then_OLS[j]
-    j = j + 1
-  }
-}
-
-coefficient_values = rbind(coefficient_values, c(0, lapply(coef_lasso_then_OLS_cv_lambda_final, function(x) round(x, 3))))
-colnames(coefficient_values) = coefficient_names
-```
 
 ### Fit lasso without cross validation, then OLS on all lambda values
 Per meeting on June 15th, tried fitting LASSO in first iteration without cross validation, took sets of predictors selected with each lambda value tried, then fit OLS on each of those sets, taking the OLS fit with the lowest MSE as the best fit.
@@ -480,18 +343,6 @@ R_squared_values
 pred_fit_relaxed_1se = predict(cv_fit_relaxed, newx = x_test, s = cv_lambda_relaxed_1se)
 pred_fit_relaxed_min = predict(cv_fit_relaxed, newx = x_test, s = cv_lambda_relaxed_min)
 
-new_x_test = x_test[, non_zero_coef_lasso_same_lambda_indeces]
-pred_fit_lasso_then_ridge_same_lambda = predict(fit_lasso_then_ridge_same_lambda, newx = new_x_test)
-
-new_x_test = x_test[, non_zero_coef_lasso_cv_lambda_indeces]
-pred_fit_lasso_then_ridge_cv_lambda = predict(fit_lasso_then_ridge_cv_lambda, newx = new_x_test)
-
-new_x_test = x_test[, non_zero_coef_lasso_then_OLS_same_lambda_indeces]
-pred_fit_lasso_then_OLS_same_lambda = predict(fit_lasso_then_OLS_same_lambda, newx = new_x_test)
-
-new_x_test = x_test[, non_zero_coef_lasso_cv_then_OLS_indeces]
-pred_fit_lasso_then_OLS_cv_lambda = predict(fit_lasso_then_OLS_cv_lambda, newx = new_x_test)
-
 new_x_test = x_test[, non_zero_coef_lasso_then_OLS_all_predictors_indeces_best_fit]
 pred_fit_lasso_then_OLS_all_predictors = predict(fit_lasso_then_OLS_all_predictors, newx = new_x_test)
 
@@ -502,17 +353,13 @@ pred_fit_lasso_cv_then_OLS_all_predictors = predict(fit_lasso_cv_then_OLS_all_pr
 # Compute MSE
 mse_relaxed_min <- sum((pred_fit_relaxed_min - y_test)^2)
 mse_relaxed_1se <- sum((pred_fit_relaxed_1se - y_test)^2)
-mse_lasso_then_ridge_same_lambda <- sum((pred_fit_lasso_then_ridge_same_lambda - y_test)^2)
-mse_lasso_then_ridge_cv_lambda <- sum((pred_fit_lasso_then_ridge_cv_lambda - y_test)^2)
-mse_lasso_then_OLS_same_lambda <- sum((pred_fit_lasso_then_OLS_same_lambda - y_test)^2)
-mse_lasso_then_OLS_cv_lambda <- sum((pred_fit_lasso_then_OLS_cv_lambda - y_test)^2)
 mse_lasso_then_OLS_all_predictors <- sum((pred_fit_lasso_then_OLS_all_predictors - y_test)^2)
 mse_lasso_cv_then_OLS_all_predictors <- sum((pred_fit_lasso_cv_then_OLS_all_predictors - y_test)^2)
 
-MSEs = data.frame(matrix(nrow = 8, ncol = 2))
+MSEs = data.frame(matrix(nrow = 4, ncol = 2))
 colnames(MSEs) = c("Model fitting procedure", "Test MSE")
 MSEs[, 1] = model_fit_labels
-MSEs[, 2] = c(mse_relaxed_min, mse_relaxed_1se, mse_lasso_then_ridge_same_lambda, mse_lasso_then_ridge_cv_lambda, mse_lasso_then_OLS_same_lambda, mse_lasso_then_OLS_cv_lambda, mse_lasso_then_OLS_all_predictors, mse_lasso_cv_then_OLS_all_predictors)
+MSEs[, 2] = c(mse_relaxed_min, mse_relaxed_1se, mse_lasso_then_OLS_all_predictors, mse_lasso_cv_then_OLS_all_predictors)
 
 MSEs
 
