@@ -140,7 +140,7 @@ coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names
 
 ``` {r glmnet-relaxed-true-baseline, echo = FALSE}
 set.seed(2023)
-fit_relaxed = glmnet(x_train, y_train, gamma = 0, relax = TRUE)
+#fit_relaxed = glmnet(x_train, y_train, gamma = 0, relax = TRUE)
 cv_fit_relaxed = cv.glmnet(x_train, y_train, gamma = 0, relax = TRUE)
 
 cv_lambda_relaxed_min = cv_fit_relaxed$relaxed$lambda.min
@@ -173,7 +173,7 @@ colnames(coefficient_values) = coefficient_names
 
 
 ### Fit lasso without cross validation, then OLS on all lambda values
-Per meeting on June 15th, tried fitting LASSO in first iteration without cross validation, took sets of predictors selected with each lambda value tried, then fit OLS on each of those sets, taking the OLS fit with the lowest MSE as the best fit.
+Per meeting on June 15th, tried fitting LASSO in first iteration without cross validation, took sets of predictors selected with each lambda value tried, then fit OLS on each of those sets, taking the OLS fit with the lowest CV-MSE as the best fit.
 
 ``` {r lasso-then-ols-all-predictors, echo = FALSE}
 set.seed(2023)
@@ -200,10 +200,7 @@ for(i in (1: length(all_coef_fit_lasso))) {
   
   fit_OLS_on_LASSO_subset = lm(y~., data = data, x = TRUE, y = TRUE)
   
-  coef_fit_OLS_on_LASSO_subset = coef(fit_OLS_on_LASSO_subset)
-  
-  #CHANGE THIS
-  coef_fit_OLS_on_LASSO_subset = coef_fit_OLS_on_LASSO_subset[-1]
+  coef_fit_OLS_on_LASSO_subset = coef(fit_OLS_on_LASSO_subset)[-1]
 
   fit_OLS_cv_on_LASSO_subset = cv.lm(fit_OLS_on_LASSO_subset, k = 5)
   MSE = fit_OLS_cv_on_LASSO_subset$MSE$mean
@@ -241,6 +238,8 @@ Same fit as above but LASSO fit in first iteration is done with cross validation
 set.seed(2023)
 fit_lasso_cv = cv.glmnet(x_train, y_train, family="gaussian", alpha=1)
 
+coefficient_values = rbind(coefficient_values, c(0, lapply(coef(fit_lasso_cv)[-1], function(x) round(x, 3))))
+
 all_coef_fit_lasso_cv = as.data.frame.matrix(fit_lasso_cv$glmnet.fit$beta)
 
 current_MSE = .Machine$double.xmax;
@@ -262,10 +261,7 @@ for(i in (1: length(all_coef_fit_lasso_cv))) {
   
   fit_OLS_on_LASSO_cv_subset = lm(y~., data = data, x = TRUE, y = TRUE)
   
-  coef_fit_OLS_on_LASSO_cv_subset = coef(fit_OLS_on_LASSO_cv_subset)
-  
-  #CHANGE THIS
-  coef_fit_OLS_on_LASSO_cv_subset = coef_fit_OLS_on_LASSO_cv_subset[-1]
+  coef_fit_OLS_on_LASSO_cv_subset = coef(fit_OLS_on_LASSO_cv_subset)[-1]
 
   fit_OLS_cv_on_LASSO_cv_subset = cv.lm(fit_OLS_on_LASSO_cv_subset, k = 5)
   MSE = fit_OLS_cv_on_LASSO_cv_subset$MSE$mean
@@ -300,8 +296,7 @@ colnames(coefficient_values) = coefficient_names
 
 ``` {r relaxed-lasso-glmnet-implementation-coefficient-values, echo=FALSE}
 colnames(coefficient_values) = coefficient_names
-model_fit_labels = c("CV, lambda min, relax = TRUE", "CV, lambda 1se, relax = TRUE", "lasso noCV relax = FALSE, then OLS fit on selected predictors from every lambda", "lasso CV relax = FALSE, then OLS fit on selected predictors from every lambda")
-
+model_fit_labels = c("glmnet relax = TRUE, CV, lambda min", "glmnet relax = TRUE, CV, lambda 1se", "glmnet lasso noCV, then CV-OLS fit on selected predictors from every lambda", "glmnet lasso CV", "glmnet lasso CV, then CV-OLS fit on selected predictors from every lambda")
 
 options(digits = 5)
 
@@ -344,8 +339,9 @@ pred_fit_relaxed_min = predict(cv_fit_relaxed, newx = x_test, s = cv_lambda_rela
 new_x_test = x_test[, non_zero_coef_lasso_then_OLS_all_predictors_indeces_best_fit]
 colnames(new_x_test) = names(fit_lasso_then_OLS_all_predictors$coefficients)[-1]
 X = as.data.frame.matrix(new_x_test)
-
 pred_fit_lasso_then_OLS_all_predictors = predict(fit_lasso_then_OLS_all_predictors, newdata = X)
+
+pred_fit_lasso_cv = predict(fit_lasso_cv, newx = x_test)
 
 new_x_test = x_test[, non_zero_coef_lasso_cv_then_OLS_all_predictors_indeces_best_fit]
 colnames(new_x_test) = names(fit_lasso_cv_then_OLS_all_predictors$coefficients)[-1]
@@ -358,12 +354,13 @@ pred_fit_lasso_cv_then_OLS_all_predictors = predict(fit_lasso_cv_then_OLS_all_pr
 mse_relaxed_min <- sum((pred_fit_relaxed_min - y_test)^2)
 mse_relaxed_1se <- sum((pred_fit_relaxed_1se - y_test)^2)
 mse_lasso_then_OLS_all_predictors <- sum((pred_fit_lasso_then_OLS_all_predictors - y_test)^2)
+mse_lasso_cv <- sum((pred_fit_lasso_cv - y_test)^2)
 mse_lasso_cv_then_OLS_all_predictors <- sum((pred_fit_lasso_cv_then_OLS_all_predictors - y_test)^2)
 
-MSEs = data.frame(matrix(nrow = 4, ncol = 2))
+MSEs = data.frame(matrix(nrow = 5, ncol = 2))
 colnames(MSEs) = c("Model fitting procedure", "Test MSE")
 MSEs[, 1] = model_fit_labels
-MSEs[, 2] = c(mse_relaxed_min, mse_relaxed_1se, mse_lasso_then_OLS_all_predictors, mse_lasso_cv_then_OLS_all_predictors)
+MSEs[, 2] = c(mse_relaxed_min, mse_relaxed_1se, mse_lasso_then_OLS_all_predictors, mse_lasso_cv, mse_lasso_cv_then_OLS_all_predictors)
 
 MSEs
 
@@ -380,7 +377,9 @@ MSEs
 ``` {r relaxed-lasso-glmnet-cv-results, echo=FALSE}
 par(mfrow = c(1, 1), mar = c(2, 4, 6, 4))
 plot(cv_fit_relaxed, main = "relax = TRUE fit, cv lambda")
-plot(fit_OLS_cv_on_LASSO_cv_subset, main = "relax = FALSE fit, only lasso, cv lambda")
+plot(fit_lasso_cv, main = "glmnet lasso cv")
+
+#plot(fit_OLS_cv_on_LASSO_cv_subset, main = "relax = FALSE fit, only lasso, cv lambda")
 #plot(fit_lasso_cv_then_OLS_all_predictors, main = "relax = FALSE fit, only lasso, cv lambda")
 
 # plot(fit_lasso_then_ridge_cv_lambda, main = "relax = FALSE fit, lasso then ridge, lambda = 1se lambda found with cv on lasso")
