@@ -113,6 +113,8 @@ crisk.sim_block <-
     # Diagonal elements should be 1
     diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
     
+    X <- mvtnorm::rmvnorm(n, sigma = correlation_matrix)
+    
     for (i in 1:n) {
       eff <- mvtnorm::rmvnorm(1, sigma = correlation_matrix)
       
@@ -134,7 +136,7 @@ crisk.sim_block <-
 #' @param fit_object Output of \code{fit_cbmodel}
 #' @return Multinomial deviance
 multi_deviance <- function(cb_data, fit_object) {
-  X <- as.matrix(cbind(cb_data$time, cb_data$covariates))
+  X <- as.matrix(cbind(cb_data$covariates, 1))
   fitted_vals <- as.matrix(X %*% fit_object$coefficients)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
                                    inverse = TRUE)
@@ -199,10 +201,10 @@ fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
     lambda1 <- lambda*alpha
     lambda2 <- 0.5*lambda*(1 - alpha)
     # Prepare covariate matrix
-    X <- as.matrix(cb_data$covariates)
+    X <- as.matrix(cbind(cb_data$covariates, 1))
     # mtool.MNlogistic is too verbose...
     out <- fit.mtool <- mtool::mtool.MNlogistic(
-        X = as.matrix(cbind(X, 1)),
+        X = as.matrix(X),
         Y = cb_data$event_ind,
         offset = cb_data$offset,
         N_covariates = unpen_cov,
@@ -244,7 +246,7 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
       fit_val_max <- mclapply(initial_max_grid, 
                                function(lambda_val) {
                                  fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha)}, mc.cores = 4)
+                                             lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = 4)
       non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
       if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
         warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
@@ -255,21 +257,23 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
       fit_val_max <-  mclapply(new_max_searchgrid, 
                                function(lambda_val) {
                                  fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha)}, mc.cores = 4)
+                                             lambda = lambda_val, alpha = alpha,
+                                             unpen_cov = constant_covariates)}, mc.cores = 4)
       non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = 4))
       lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
     }
   }
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
   cb_data_train <- as.data.frame(cb_data_train)
+  cb_data_train <- cb_data_train %>%
+    select(-time)
   # Create folds 
   folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
   lambda.min <- rep(NA_real_, nfold)
   all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   non_zero_coefs <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
-  
   #Perform 10 fold cross validation
-  for(i in 1:nfold) {
+  for(i in 1:nfold){
     #Segment your data by fold using the which() function 
     train_cv <- cb_data_train[which(folds != i), ] #Set the training set
     test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
@@ -281,13 +285,13 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
     cvs_res <- mclapply(lambdagrid, 
       function(lambda_val) {
       fit_cbmodel(train_cv, regularization = 'elastic-net',
-                  lambda = lambda_val, alpha = alpha)
+                  lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
     }, mc.cores = 4)
-    test_cv <- list("time" = test_cv$time,
+    test_cv <- list("time" = test_cv$covariates.time,
                     "event_ind" = test_cv$event_ind,
-                    "covariates" = test_cv[, grepl("covariates", names(test_cv))],
+                    "covariates" = as.matrix(test_cv[, grepl("covariates", names(test_cv))]),
                     "offset" = test_cv$offset)
-    mult_deviance <- unlist(mclapply(cvs_res, multi_deviance, cb_data = test_cv, mc.cores = 4))
+    mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
     all_deviances[, i] <- mult_deviance
     mean_dev <- rowMeans(all_deviances)
     lambda.min <- lambdagrid[which.min(mean_dev)]
@@ -367,3 +371,118 @@ varsel_perc <- function(model_coef, true_coef) {
 #' mean_dev <- rowMeans(all_deviances)
 #' })
 #' }
+#' 
+#' ############################################################################
+#' # Simulate from Fine-Gray model for CIF prediction comparisons 
+simulateTwoCauseModel <- function(n, p, beta1, beta2, num.true = 20, mix_p = 0.5
+                                     , noise_cor = 0.1, nblocks = 4, 
+                                  rho = 1.5, u.max = 0.05) {
+  # Warnings
+  if(length(beta1) != length(beta2)) stop("Dimension of beta1 and beta2 should be the same")
+  # Set the number of variables per block
+  vpb <- num.true/nblocks
+  # Set the correlation values for each covariate block
+  correlation_values <- c(0.7, 0.4, 0.6, 0.5)
+  # Initialize empty matrix
+  correlation_matrix <- matrix(noise_cor, nrow = p, ncol = p)
+  # Generate the covariance matrix with block correlations
+  for (i in 1:nblocks) {
+    start_index <- (i - 1) * vpb + 1
+    end_index <- i * vpb
+    correlation_matrix[start_index:end_index, start_index:end_index] <- correlation_values[i]
+  }
+  # Diagonal elements should be 1
+  diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
+  
+  X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = correlation_matrix)
+  # General indicator for cause
+  c.ind <- 1 + rbinom(n, 1, prob = (1 - mix_p)^exp(X %*% beta1))
+  
+  #Conditional on cause indicators, we simulate the model.
+  ftime <- numeric(n)
+  eta1 <- X[c.ind == 1, ] %*% beta1 #linear predictor for cause on interest
+  eta2 <- X[c.ind == 2, ] %*% beta2 #linear predictor for competing risk
+  
+  u1 <- runif(length(eta1))
+  u2 <- runif(length(eta2))
+  t1 <-  (- log(u1) / (1 * exp(eta1)))^(1 / rho)
+  # Winsorising tiny values for t (smaller than one day on a yearly-scale, e.g. 1 / 365.242), and adding a tiny amount of white noise not to have too many concurrent values
+  t1 <- ifelse(t1 < 1 / 365.242, 1 / 365.242, t1)
+  t1[t1 == 1 / 365.242] <- t1[t1 == 1 / 365.242] + rnorm(length(t1[t1 == 1 / 365.242]), mean = 0, sd = 1e-4)
+  # Fixing large values of t (to make sure it is within 1-year study range)
+  t1 <- ifelse(t1 > 1, 1, t1)
+  t1[t1 ==  1] <- t1[t1 == 1] + rnorm(length(t1[t1 == 1]), mean = 0, sd = 1e-4)
+  # ...and make sure that the resulting value is positive
+  t1 <- abs(t1)
+  #t1 <- -log(1 - (1 - (1 - u1 * (1 - (1 - p)^exp(eta1)))^(1 / exp(eta1))) / p)
+  #rexp(length(eta2), rate = exp(eta2))
+  t2 <-  (- log(u2) / (1000 * exp(eta2)))^(1 / rho)
+  # Winsorising tiny values for t (smaller than one day on a yearly-scale, e.g. 1 / 365.242), and adding a tiny amount of white noise not to have too many concurrent values
+  t2 <- ifelse(t2 < 1 / 365.242, 1 / 365.242, t2)
+  t2[t2 == 1 / 365.242] <- t2[t2 == 1 / 365.242] + rnorm(length(t2[t2 == 1 / 365.242]), mean = 0, sd = 1e-4)
+  # Fixing large values of t (to make sure it is within 1-year study range)
+  t2 <- ifelse(t2 > 1, 1, t2)
+  t2[t2 ==  1] <- t2[t2 == 1] + rnorm(length(t2[t2 == 1]), mean = 0, sd = 1e-4)
+  t2 <- abs(t2)
+  ftime[c.ind == 1] <- t1
+  ftime[c.ind == 2] <- t2
+  # Calculate the desired proportions
+  #prop_1 <- prop.table(table(c.ind))[1]-0.47
+ # prop_2 <- prop.table(table(c.ind))[2]-0.28
+ #cens_prop <- 0.25
+  # Calculate the number of elements to set to zero
+ # total_zero <- round(length(ftime) * prop_2)
+ #zero_1 <- round(total_zero * prop_1)
+ # zero_2 <- total_zero - zero_1
+  
+  # Stratified uniform censoring attempt
+ # cens_1 <- sample(which(c.ind == 1), zero_1)
+ # cens_2 <- sample(which(c.ind == 2), zero_2)
+ ## c.ind[cens_1] <- 0
+#  c.ind[cens_2] <- 0
+  ci <- runif(n, min = 0, max = u.max)
+ # ci1 <- runif(length(cens_1), min = 0.002, max = max(t1))
+ # ci2 <- runif(length(cens_1), min = 0.002, max = max(t2))
+ # ftime <- ifelse(c.ind == 0, ci, ftime)
+# fstatus <- c.ind
+ftime <- pmin(ftime, ci)
+fstatus <- ifelse(ftime == ci, 0, 1)
+fstatus <- fstatus * c.ind
+  sim.data <- data.frame(fstatus = fstatus, ftime = ftime)
+  X <- as.data.frame(X)
+  colnames(X) <- paste0("X", seq_len(p))
+  sim.data <- as.data.frame(cbind(sim.data, X))
+  return(sim.data)
+}
+################## Prediction function for coxBoost ###########################
+predictRisk.iCoxBoost <- function(object, newdata, times, cause,...){
+  p <- predict(object, newdata= newdata,type="CIF",times= newdata$ftime)
+ # if (is.null(dim(p))) {
+#    if (length(p)!=length(times))
+ #     stop("Prediction failed (wrong number of times)")
+ # }
+#  else{
+#    if (NROW(p) != NROW(newdata) || NCOL(p) != length(times))
+#      stop(paste("\nPrediction matrix has wrong dimension:\nRequested newdata x times: ",NROW(newdata)," x ",length(times),"\nProvided prediction matrix: ",NROW(p)," x ",NCOL(p),"\n\n",sep=""))
+#  }
+ p
+}
+##################### Prediction function for casebase penalized model ################
+predict_CompRisk <- function(object, newdata = NULL) {
+  ttob <- terms(object)
+  X <- model.matrix(delete.response(ttob), newdata,
+                    contrasts = if (length(object@contrasts)) {
+                      object@contrasts
+                    } else NULL,
+                    xlev = object@xlevels)
+  coeffs <- matrix(coef(object), nrow = ncol(X),
+                   byrow = TRUE)
+  preds <- X %*% coeffs
+  colnames(preds) <- paste0("log(mu[,",
+                            seq(2, length(object@typeEvents)),
+                            "]/mu[,1])")
+  return(preds)
+}
+
+############ Function to simulate from cause-specific hazards ############################
+
