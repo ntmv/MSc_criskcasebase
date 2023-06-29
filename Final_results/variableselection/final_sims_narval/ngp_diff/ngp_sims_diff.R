@@ -1,4 +1,4 @@
-########################### P > n simulation ######################
+########################### n = 400, p = 120, Tp = 20  b1 neq b2 simulation ######################
 library(casebase)
 library(future.apply)
 library(glmnet)
@@ -9,15 +9,14 @@ library(tidyverse)
 library(foreach)
 library(survival)
 library(cmprsk)
-library(survminer)
+
 # Fitting functions 
-source("../src/fitting_functions_nonparallel.R")
+source("../src/fitting_functions.R")
 
-
-#Results <- replicate(5, {
-# Simulate data from cause-specific sub-distribution hazards 
+set.seed(115)
+# Setup
 n <- 400
-p <- 1000
+p <- 120
 num_true <- 20
 beta1 <- c(1, 1, 1, 1,1,  1, 1, 1, 1, 1, -1, -1, -1, -1, -1, 1, 1, 1, 1,1, rep(0, 980))
 beta2 <- c(1, 1, 1, 1, 1,  -1, -1, -1, -1, -1,  1, 1, 1, 1, 1, 0.8, 0.8, 0.8, 0.8, 0.8, rep(0, 980))
@@ -25,10 +24,12 @@ nu_ind <- seq(num_true)
 beta1[nu_ind] <- 1
 beta2[nu_ind] <- 0.8
 
+# Simulate data
 sim.data <- simulateTwoCauseModel(n = n, p = p, nblocks = 4, 
-                                                beta1 = beta1, mix_p = 0.6, 
-                                                beta2 = beta2, u.max = 1)
+                                  beta1 = beta1, mix_p = 0.6, 
+                                  beta2 = beta2, u.max = 1)
 
+# Censoring proportion
 cen.prop <- c(prop.table(table(sim.data$fstatus)), 0, 0, 0, 0)
 
 # Training-test split 
@@ -36,12 +37,6 @@ train.index <- caret::createDataPartition(sim.data$fstatus, p = 0.75, list = FAL
 train <- sim.data[train.index,]
 test <- sim.data[-train.index,]
 
-cif <- cuminc(fstatus = train$fstatus, ftime = train$ftime)
-plot(cif)
-
-ggcompetingrisks(cif, palette = "Dark2",
-                 legend = "top",
-                 ggtheme = theme_bw())
 ######################## Fit cox-regression model ###############################
 # Censor competing event
 y_train <- Surv(time = train$ftime, event = train$fstatus == 1)
@@ -63,28 +58,21 @@ cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.5,
 cc_min <- coef(cox_val_min)
 
 res_cox_min <- varsel_perc(cc_min, beta1)
+
 ########################## Fit casebase model #################################
-#   S
-# Fit case-base model 
-# Convert to case-base dataset
-surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-
-cov_train <- cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime))
-
-# Create case-base dataset
-cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio = 20)
-
-#cv.alpha <- mtool.multinom.cv(cb_data_train, alpha = 0.5, nfold = 5, lambda_max = 0.1, constant_covariates = 2)
-
-#cv.alpha
-
-# Cross-validation plot 
-#p1 <- plot_cv.multinom(cv.alpha$deviance_grid, cv.alpha$lambdagrid, cv.alpha$lambda.min, cv.alpha$lambda.1se, nfold = 5)
-
-
+# Split training set into train and validation
 train.index <- caret::createDataPartition(train$fstatus, p = 0.70, list = FALSE)
 train_new <- train[train.index,]
 validation <- train[-train.index,]
+
+# Fit case-base model 
+# Convert to case-base dataset
+surv_obj_train <- with(train_new, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+
+cov_train <- cbind(train_new[, c(grepl("X", colnames(train)))], time = log(train_new$ftime))
+
+# Create case-base dataset
+cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio = 20)
 
 # Create case base dataset for validation
 surv_obj_validation <- with(validation, Surv(ftime, as.numeric(fstatus), type = "mstate"))
@@ -99,12 +87,32 @@ cb_data_validation <- create_cbDataset(surv_obj_validation, cov_validation, rati
 # Fit lambda grid to training set 
 epsilon <- 0.001
 lambda_max <- 0.1
+grid_size <- 100
 lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
-cv_res <- mclapply(lambdagrid, 
-                 function(lambda_val) {
-                   fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                               lambda = lambda_val, alpha = 0.5)}, mc.cores = 4)
 
+# Set the number of cores to be used for parallel processing
+num_cores <- parallelly::availableCores()  # Adjust the number of cores as per your system's capacity
+# Create a parallel cluster using the specified number of cores
+cl <- parallel::makeCluster(num_cores, setup_strategy = "sequential")
+
+# Load necessary packages on each cluster
+clusterEvalQ(cl, {
+  library(casebase)
+  library(future.apply)
+  library(mtool)
+  library(parallel)
+  library(dplyr)
+})
+
+# Export necessary objects to all clusters
+objects_to_export <- c("lambdagrid", "fit_cbmodel", "multi_deviance", "cb_data_train")
+clusterExport(cl, objects_to_export)
+
+cv_res <- foreach(lambda_val = lambdagrid, .packages = "mtool") %dopar% {
+  fit_cbmodel(cb_data_train, regularization = 'elastic-net', lambda = lambda_val, alpha = 0.5)
+}
+
+stopCluster(cl)
 
 # Fit to validation test to choose lambda min
 mult_deviance <- unlist(lapply(cv_res, multi_deviance, cb_data = cb_data_validation))
@@ -113,7 +121,7 @@ mult_deviance <- unlist(lapply(cv_res, multi_deviance, cb_data = cb_data_validat
 lambda.min <- lambdagrid[which.min(mult_deviance)]
 #})
 
-# validation set
+# Test set 
 surv_obj_val <- with(test, Surv(ftime, as.numeric(fstatus), type = "mstate"))
 
 # Covariance matrix
@@ -135,16 +143,13 @@ Res <- rbind(res_cb_min, res_cox_min, cen.prop)
 rownames(Res) <- c("casebase.lambda.min", "cox.lambda.min", "cens.prop")
 
 Res
-toc()
 
-#}, simplify = FALSE)
-
-
-#Result3 <- do.call(rbind, Results)
-
-write.csv(Res, file = paste0(runif(1), "iid_sparse.csv"))
+write.csv(Res, file = paste0(runif(1), "n400p1000tp20ss.csv"))
 
 #png(filename = paste0(runif(1), "cv.png"), height = 15, width = 20, res = 300, units = "cm")
 #p1
 #dev.off()
+
+
+
 
