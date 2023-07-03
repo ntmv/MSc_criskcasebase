@@ -92,7 +92,8 @@ y2_test = Y2[-train_index_Y2]
 set.seed(2023)
 fit_Y1 = cv.glmnet(x_train, y1_train, gamma = 0, relax = FALSE)
 relaxed_fit_Y1 = cv.glmnet(x_train, y1_train, gamma = 0, relax = TRUE)
-my_relaxed_fit_Y1 = myRelaxed(x_train, y1_train)
+my_relaxed_fit_Y1 = myRelaxed(x_train, y1_train, FALSE)
+my_relaxed_fit_cv_Y1 = myRelaxed(x_train, y1_train, TRUE)
 ```
 
 ``` {r post-lasso-fits, echo=FALSE, include = FALSE}
