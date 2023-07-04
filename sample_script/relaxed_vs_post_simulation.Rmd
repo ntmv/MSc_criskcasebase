@@ -124,8 +124,6 @@ coefficient_names = c("Model fitting procedure", coefficient_names)
 coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names) + 1))
 
 col_names = rownames(as.data.frame.matrix(coef(relaxed_fit_Y1)))
-myRelaxed_coefficient_row = formatCoefficientTableRow(my_relaxed_fit_Y1$coefficients, col_names)
-
 coef_values = as.numeric(coef(fit_Y1_post_lasso_lambda_min))
 coef_names = rownames(coef(fit_Y1_post_lasso_lambda_min))
 names(coef_values) = coef_names
@@ -143,7 +141,7 @@ coefficient_values = rbind(coefficient_values,
                            c(0, lapply(coef(fit_Y1)[-1], function(x) round(x, 3))),
                            c(0, lapply(relaxed_fit_Y1$glmnet.fit$relaxed$beta[, relaxed_fit_Y1$relaxed$index[1]], function(x) round(x, 3))),
                            c(0, lapply(coef(relaxed_fit_Y1)[-1], function(x) round(x, 3))),
-                           c(0, lapply(myRelaxed_coefficient_row, function(x) round(x, 3))),
+                           c(0, lapply(my_relaxed_fit_Y1$coefficients[my_relaxed_fit_Y1$min_lambda_index, -1], function(x) round(x, 3))),
                            c(0, lapply(Y1_post_lasso_lambda_min_coefficient_row, function(x) round(x, 3))),
                            c(0, lapply(Y1_post_lasso_lambda_1se_coefficient_row, function(x) round(x, 3))))
                         
@@ -165,7 +163,7 @@ pred_fit_1se = predict(fit_Y1, newx = x_test, s = fit_Y1$lambda.1se)
 pred_fit_relaxed_min = predict(relaxed_fit_Y1, newx = x_test, s = relaxed_fit_Y1$relaxed$lambda.min)
 pred_fit_relaxed_1se = predict(relaxed_fit_Y1, newx = x_test, s = relaxed_fit_Y1$relaxed$lambda.1se)
 
-pred_myRelaxed = predict(my_relaxed_fit_Y1, newx = x_test)
+pred_myRelaxed = predict(my_relaxed_fit_Y1$best_fit, newx = x_test)
 
 coefficient_names = colnames(as.data.frame(x_test))
 new_x_test = x_test[, non_zero_coef_lasso_then_OLS_same_lambda_indeces]
