@@ -9,7 +9,7 @@ myRelaxed = function(train_data, response, cv) {
   coefficient_names = colnames(as.data.frame(train_data))
   response_name = names(as.data.frame(response))
   
-  coefs_all_lambdas = data.frame(matrix(nrow = 0, ncol = length(coefficient_names) + 1))
+  coefs_all_lambdas = data.frame(matrix(nrow = 1, ncol = length(coefficient_names) + 1))
   colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
   MSEs_all_lambda = c()
   
@@ -31,11 +31,13 @@ myRelaxed = function(train_data, response, cv) {
   # indeces = c(30:33)
   
   for(i in indeces) {
+    rows = nrow(coefs_all_lambdas)
     current_coef = all_coef_fit_lasso[i]
     non_zero_coef_lasso_then_OLS_all_predictors = current_coef[all_coef_fit_lasso[i] != 0]
     all_zeros = length(non_zero_coef_lasso_then_OLS_all_predictors) == 0
     
     if (all_zeros){
+      coefs_all_lambdas[rows,] = 0
       next
     }
 
@@ -79,8 +81,10 @@ myRelaxed = function(train_data, response, cv) {
     }
 
     MSE = mean(mse_values)
-
-    rows = nrow(coefs_all_lambdas)
+    cat(paste("Num rows: ", rows))
+    writeLines("")
+    cat(paste("i: ", i))
+    writeLines("")
     coefs_all_lambdas[rows+1,] = 0
     j = 1
     
@@ -92,7 +96,10 @@ myRelaxed = function(train_data, response, cv) {
         j = j + 1
       }
     } 
-    
+    # if(all_zeros) {
+    #   cat(coefs_all_lambdas[rows+1,])
+    # }
+    # 
     MSEs_all_lambda = rbind(MSEs_all_lambda, MSE)
 
     if(MSE < current_MSE) {
@@ -107,8 +114,9 @@ myRelaxed = function(train_data, response, cv) {
   cat("\nEND OF FITTING\n")
   toc()
   
-  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda,
-                min_lambda_index = best_lambda_index)
+  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
+                min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
+                best_fit = best_fit)
   return (result)
 }
 
