@@ -20,7 +20,7 @@
 
 - `simulation_scripts` - Template script for simulation from a two-cause model using the `replicate` function 
 
-- `src` - Fitting functions and survival performance metrics functions 
+- `src` - Helper fitting functions including the cross-validation function, simulation functions, and survival performance metrics functions 
 
 - `survsim_mod` - Contains modified funtions from the `survsim` `R` package to generate competing risks data with normally distributed covariates having 1) AR(1) correlation structure and 2) Block correlation structure
 
