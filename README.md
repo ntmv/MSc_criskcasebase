@@ -8,24 +8,24 @@
 
 - `bash_script_template` - Template for bash scripts for Compute Canada. Creates individual bash scripts to be submitted to the cluster for one simulation run. Requires `runscripts` and `logs` folder to be setup
 
-📌 `doc` - Thesis write up using `ubcdiss` template
+- `doc` - Thesis write up using `ubcdiss` template
 
-📌 `Final_results` - Contains all final scripts,figures and results generated for the thesis for variable selection and prediction performance
+- `Final_results` - Contains all final scripts,figures and results generated for the thesis for variable selection and prediction performance
 
-📌 `mtool` - `R` package for fitting a penalized multinomial regression model with the K-1 logit parameterization 
+- `mtool` - `R` package for fitting a penalized multinomial regression model with the K-1 logit parameterization 
 
-📌 `mtool_fit_diagnostics` - Documentation of known issues with `mtool`
+- `mtool_fit_diagnostics` - Documentation of known issues with `mtool`
 
-📌 `Papers` - Papers for background information. To be updated. 
+- `Papers` - Papers for background information. To be updated. 
 
-📌`simulation_scripts` - Template script for simulation from a two-cause model using the `replicate` function 
+-`simulation_scripts` - Template script for simulation from a two-cause model using the `replicate` function 
 
-📌 `src` - Fitting functions and survival performance metrics functions 
+- `src` - Fitting functions and survival performance metrics functions 
 
-📌 `survsim_mod` - Contains modified funtions from the `survsim` `R` package to generate competing risks data with normally distributed covariates having 1) AR(1) correlation structure
+- `survsim_mod` - Contains modified funtions from the `survsim` `R` package to generate competing risks data with normally distributed covariates having 1) AR(1) correlation structure
 2) Block correlation structure
 
-📌 `updates` - Weekly meeting updates
+- `updates` - Weekly meeting updates
 
 # 📃 Abstract
 
