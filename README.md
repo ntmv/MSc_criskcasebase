@@ -18,7 +18,7 @@
 
 - `Papers` - Papers for background information. To be updated. 
 
--`simulation_scripts` - Template script for simulation from a two-cause model using the `replicate` function 
+- `simulation_scripts` - Template script for simulation from a two-cause model using the `replicate` function 
 
 - `src` - Fitting functions and survival performance metrics functions 
 
