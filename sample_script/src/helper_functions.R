@@ -54,12 +54,6 @@ myRelaxed = function(train_data, response, cv, print_time) {
       non_zero_coef_indeces = which(current_coef != 0)
       non_zero_coef_names = coefficient_names[non_zero_coef_indeces]
       new_x_train = train_data[, non_zero_coef_indeces]
-      # print(head(new_x_train))
-      # writeLines("")
-      # print(non_zero_coef_names)
-      # writeLines("")
-      # print(i)
-      # writeLines("")
       
       # Subset X and y for cross validation
       # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
@@ -72,11 +66,16 @@ myRelaxed = function(train_data, response, cv, print_time) {
       for(m in 1:k) {
         train_indices <- folds[[m]]
         # TODO: Fix code so column names
-        print(head())
-        if(is.numeric(new_x_train)) {
-          names(new_x_train) = c(non_zero_coef_names)
-        } else {
-          colnames(new_x_train) = c(non_zero_coef_names)
+        # if(is.numeric(new_x_train)) {
+        #   names(new_x_train) = c(non_zero_coef_names)
+        # } else {
+        #   colnames(new_x_train) = c(non_zero_coef_names)
+        # }
+        if(i %in% c(1, 2, 3, 4, 30)) {
+          writeLines("")
+          print(paste("lambda index: ", i))
+          cat(class(new_x_train))
+          cat(non_zero_coef_indeces)
         }
         traindata <- new_x_train[train_indices, ]
         testdata  <- new_x_train[-train_indices, ]
@@ -118,10 +117,14 @@ myRelaxed = function(train_data, response, cv, print_time) {
   }
   ,
   error = function(e) {
-    print(e)
-    print(class(new_x_train))
-    print(head(new_x_train))
-    print(paste("lambda index: ", i))
+    # print(e)
+    # writeLines("")
+    # print(paste("lambda index: ", i))
+    # writeLines("")
+    # traceback(sys.calls())
+    # print(class(new_x_train))
+    # print(head(new_x_train))
+    # print(paste("lambda index: ", i))
     # print(paste("length new_x_train: ", length(new_x_train)))
     # print(non_zero_coef_names)
   }
