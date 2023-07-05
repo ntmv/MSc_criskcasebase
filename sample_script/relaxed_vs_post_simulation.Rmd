@@ -85,7 +85,7 @@ partitionData = function(x, y) {
 
 # Fits
 
-``` {r different-models-fits, echo=FALSE, include = FALSE, eval = FALSE}
+``` {r different-models-fits, echo=FALSE, include = FALSE}
 fitAll = function(train_data, response, print_time) {
   fit_Y1 = cv.glmnet(train_data, response, gamma = 0, relax = FALSE)
   relaxed_fit_Y1 = cv.glmnet(train_data, response, gamma = 0, relax = TRUE)
@@ -113,13 +113,6 @@ fitAll = function(train_data, response, print_time) {
   
   return(result)
 }
-
-
-dataset = generateDataset(20, 400)
-partitioned_data = partitionData(dataset$X, dataset$Y)
-training_data = partitioned_data[c("x_train", "y_train")]
-resulting_fits = fitAll(training_data$x_train, training_data$y_train, FALSE)
-
 ```
 
 # Run simulation
@@ -135,107 +128,70 @@ getTestSet = function(p, n) {
   # Get test set
   dataset = generateDataset(p, n)
   partitioned_data = partitionData(dataset$X, dataset$Y)
-  test_data = partitioned_data[c("x_test", "y1_test")]
+  test_data = partitioned_data[c("x_test", "y_test")]
   return(test_data)
 }
 
-oneIteration = function(p, n) {
-  # Create dataframes to keep track of coefficient values and MSEs per each iteration of simulation
-  coefficient_names = colnames(as.data.frame(test_data$x_test))
-  coefficient_names = c("Model fitting procedure", coefficient_names)
-  coefficient_values_final = data.frame(matrix(nrow = 0, ncol = length(coefficient_names)))
-  colnames(coefficient_values_final) = coefficient_names
-  model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", "Relaxed LASSO implementation no CV",
-                     "Relaxed LASSO implementation CV", "Post LASSO lambda min", "Post LASSO lambda 1se")
+oneIteration = function(p, n, test_data) {
+  tryCatch({
+    # Get train-test sets
+    dataset = generateDataset(p, n)
+    partitioned_data = partitionData(dataset$X, dataset$Y)
+    training_data = partitioned_data[c("x_train", "y_train")]
+    resulting_fits = fitAll(training_data$x_train, training_data$y_train, FALSE)
     
-  for(i in c(1:N)) {
-    tryCatch({
-      print(paste("iteration: ", i))
-      writeLines("")
-      
-      # Get train-test sets
-      dataset = generateDataset(20, 400)
-      partitioned_data = partitionData(dataset$X, dataset$Y)
-      training_data = partitioned_data[c("x_train", "y_train")]
-      resulting_fits = fitAll(training_data$x_train, training_data$y_train, FALSE)
-      
-      coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names)))
-      colnames(coefficient_values) = coefficient_names
-      
-      col_names = rownames(as.data.frame.matrix(coef(resulting_fits$cv_glmnet_relaxed)))
-      coef_values = as.numeric(coef(resulting_fits$post_lasso_lambda_min))
-      coef_names = rownames(coef(resulting_fits$post_lasso_lambda_min))
-      names(coef_values) = coef_names
-      Y1_post_lasso_lambda_min_coefficient_row = formatCoefficientTableRow(coef_values, col_names)
-      
-      coef_values = as.numeric(coef(resulting_fits$post_lasso_lambda_1se))
-      coef_names = rownames(coef(resulting_fits$post_lasso_lambda_1se))
-      names(coef_values) = coef_names
-      Y1_post_lasso_lambda_1se_coefficient_row = formatCoefficientTableRow(coef_values, col_names)
+    # Create dataframes to keep track of coefficient values and MSEs per each iteration of simulation
+    coefficient_names = colnames(as.data.frame(training_data$x_train))
+    coefficient_names = c("Model fitting procedure", coefficient_names)
+    model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
+                         "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
+                         "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
+                         "Post LASSO lambda min", "Post LASSO lambda 1se")
     
-      
-      coefficient_values = rbind(coefficient_values, 
-                                 c(0, resulting_fits$cv_glmnet$glmnet.fit$beta[, resulting_fits$cv_glmnet$index[1]]),
-                                 c(0, coef(resulting_fits$cv_glmnet)[-1]),
-                                 c(0, resulting_fits$cv_glmnet_relaxed$glmnet.fit$relaxed$beta[, resulting_fits$cv_glmnet_relaxed$relaxed$index[1]]),
-                                 c(0, coef(resulting_fits$cv_glmnet_relaxed)[-1]),
-                                 c(0, resulting_fits$my_relaxed$coefficients[resulting_fits$my_relaxed$min_lambda_index, -1]),
-                                 c(0, resulting_fits$my_relaxed_cv$coefficients[resulting_fits$my_relaxed_cv$min_lambda_index, -1]),
-                                 c(0, Y1_post_lasso_lambda_min_coefficient_row),
-                                 c(0, Y1_post_lasso_lambda_1se_coefficient_row))
-      
-      print(coefficient_values)
+    coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names)))
+    colnames(coefficient_values) = coefficient_names
     
-      if(i == 1) {
-        coefficient_values_final = coefficient_values
-      } else {
-        # print(coefficient_values)
-        # print(coefficient_values_final)
-        # create a new variable from the rownames
-        coefficient_values$rn <- rownames(coefficient_values)
-        coefficient_values_final$rn <- rownames(coefficient_values_final)
-        
-        # bind the two dataframes together by row and aggregate
-        res <- aggregate(cbind(coefficient_names) ~ rn, rbind(coefficient_values,coefficient_values_final), sum)
-        # or (thx to @alistaire for reminding me):
-        res <- aggregate(. ~ rn, rbind(coefficient_values,coefficient_values_final), sum)
-        
-        # assign the rownames again
-        rownames(res) <- res$rn
-        
-        # get rid of the 'rn' column
-        res <- res[, -1]
+    col_names = rownames(as.data.frame.matrix(coef(resulting_fits$cv_glmnet_relaxed)))
+    coef_values = as.numeric(coef(resulting_fits$post_lasso_lambda_min))
+    coef_names = rownames(coef(resulting_fits$post_lasso_lambda_min))
+    names(coef_values) = coef_names
+    y_post_lasso_lambda_min_coefficient_row = formatCoefficientTableRow(coef_values, col_names)
     
-        
-        coefficient_values_final = res
-      }
-      print(coefficient_values_final)
-    
-      
-    },
-    error = function(e) {
-      print(e)
-    }
-    )
-  }
+    coef_values = as.numeric(coef(resulting_fits$post_lasso_lambda_1se))
+    coef_names = rownames(coef(resulting_fits$post_lasso_lambda_1se))
+    names(coef_values) = coef_names
+    y_post_lasso_lambda_1se_coefficient_row = formatCoefficientTableRow(coef_values, col_names)
   
-  options(digits = 5)
-  
-  coefficient_values_final[, 1] = model_fit_labels
-  print(coefficient_values_final)
-  
+    
+    coefficient_values = rbind(coefficient_values, 
+                               c(0, resulting_fits$cv_glmnet$glmnet.fit$beta[, resulting_fits$cv_glmnet$index[1]]),
+                               c(0, coef(resulting_fits$cv_glmnet)[-1]),
+                               c(0, resulting_fits$cv_glmnet_relaxed$glmnet.fit$relaxed$beta[, resulting_fits$cv_glmnet_relaxed$relaxed$index[1]]),
+                               c(0, coef(resulting_fits$cv_glmnet_relaxed)[-1]),
+                               c(0, resulting_fits$my_relaxed$coefficients[resulting_fits$my_relaxed$min_lambda_index, -1]),
+                               c(0, resulting_fits$my_relaxed_cv$coefficients[resulting_fits$my_relaxed_cv$min_lambda_index, -1]),
+                               c(0, y_post_lasso_lambda_min_coefficient_row),
+                               c(0, y_post_lasso_lambda_1se_coefficient_row))
+    
+    print(coefficient_values)
+      
+  },
+  error = function(e) {
+    # traceback(sys.calls())
+    # print(e)
+  })
 }
 
 runSim = function(p, n, N) {
-
   test_data = getTestSet(p, n)
   
   replicate(N, {
     oneIteration(p, n)
-    
-    
   })
+}
 
+test = getTestSet(20, 400)
+oneIteration(20, 400)
 
 ```
 
