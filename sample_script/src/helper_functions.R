@@ -36,9 +36,9 @@ myRelaxed = function(train_data, response, cv, print_time) {
     best_lambda_index = 0
   
     # Iterate over all lambdas
-    indeces = c(1:length(all_coef_fit_lasso))
+    indices = c(1:length(all_coef_fit_lasso))
   
-    for(i in indeces) {
+    for(i in indices) {
       rows = nrow(coefs_all_lambdas)
       current_coef = all_coef_fit_lasso[i]
       non_zero_coef = current_coef[all_coef_fit_lasso[i] != 0]
@@ -51,9 +51,9 @@ myRelaxed = function(train_data, response, cv, print_time) {
       }
   
       # Create new training dataframe to pass to lm() for OLS fit on selected predictors
-      non_zero_coef_indeces = which(current_coef != 0)
-      non_zero_coef_names = coefficient_names[non_zero_coef_indeces]
-      new_x_train = train_data[, non_zero_coef_indeces]
+      non_zero_coef_indices = which(current_coef != 0)
+      non_zero_coef_names = coefficient_names[non_zero_coef_indices]
+      new_x_train = train_data[, non_zero_coef_indices]
       
       # Subset X and y for cross validation
       # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
@@ -74,18 +74,43 @@ myRelaxed = function(train_data, response, cv, print_time) {
         if(i %in% c(1, 2, 3, 4, 30)) {
           writeLines("")
           print(paste("lambda index: ", i))
-          cat(class(new_x_train))
-          cat(non_zero_coef_indeces)
+          writeLines("")
+          cat(paste("Is new_x_train matrix: ", is.matrix(new_x_train)))
+          writeLines("")
+          # cat(non_zero_coef_names)
+          # writeLines("")
+          # cat(non_zero_coef_indices)
+          # writeLines("")
         }
-        traindata <- new_x_train[train_indices, ]
-        testdata  <- new_x_train[-train_indices, ]
+        if (is.matrix(new_x_train)) {
+          traindata = new_x_train[train_indices, ]
+          testdata = new_x_train[-train_indices, ]
+        } else {
+          traindata = new_x_train[train_indices]
+          testdata = new_x_train[-train_indices]
+        }
         ytrain = response[train_indices]
         ytest = response[-train_indices]
+        
+        if(!is.matrix(new_x_train)) {
+          writeLines("")
+          cat("NEW_X_TRAIN NOT MATRIX")
+          writeLines("")
+          cat(length(ytrain))
+          writeLines("")
+          cat(length(traindata))
+        }
+
   
         data = data.frame(traindata, ytrain)
-        colnames(data) = c(non_zero_coef_names, response_name)
-  
-        fit_OLS_on_LASSO_subset = lm(response~., data = data, x = TRUE, y = TRUE)
+        if(length(data) < 3) {
+          names(data) = c(non_zero_coef_names, response_name)
+        } else {
+          colnames(data) = c(non_zero_coef_names, response_name)
+        }
+        
+        form = as.formula(paste(response_name, "~."))
+        fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
         pred = predict(fit_OLS_on_LASSO_subset, newdata = as.data.frame.matrix(testdata))
   
         mse_values[m] = mean((ytest - pred)^2)
@@ -117,22 +142,10 @@ myRelaxed = function(train_data, response, cv, print_time) {
   }
   ,
   error = function(e) {
-    # print(e)
-    # writeLines("")
-    # print(paste("lambda index: ", i))
-    # writeLines("")
-    # traceback(sys.calls())
-    # print(class(new_x_train))
-    # print(head(new_x_train))
-    # print(paste("lambda index: ", i))
-    # print(paste("length new_x_train: ", length(new_x_train)))
-    # print(non_zero_coef_names)
+    print(e)
   }
   # ,
   # warning = function(w) {
-  #   print(head(new_x_train))
-  #   print(non_zero_coef_names)
-  #   return(NA)
   # }
   )
   if(print_time)
