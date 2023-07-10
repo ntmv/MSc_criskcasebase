@@ -1,5 +1,3 @@
-install.packages( "/Users/alex/Downloads/lmvar_1.5.2.tar.gz", repos=NULL, type="source")
-library(lmvar)
 library(tictoc)
 library(caret)
 
@@ -49,13 +47,16 @@ myRelaxed = function(train_data, response, cv, print_time) {
         coefs_all_lambdas[rows,] = 0
         next
       }
-  
+      
+      
+      # TODO: Look into using predict() with type = "nonzero" as a way to get nonzero coefficients from a glmnet fit for particular lambda values
+      # (might be more efficent that using which and subsetting the whole training set, then refitting with lm())
+      
       # Create new training dataframe to pass to lm() for OLS fit on selected predictors
       non_zero_coef_indices = which(current_coef != 0)
       non_zero_coef_names = coefficient_names[non_zero_coef_indices]
       new_x_train = train_data[, non_zero_coef_indices]
-      
-      # Subset X and y for cross validation
+
       # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
       
       #Perform cross-validation
@@ -71,17 +72,6 @@ myRelaxed = function(train_data, response, cv, print_time) {
         # } else {
         #   colnames(new_x_train) = c(non_zero_coef_names)
         # }
-        if(i %in% c(1, 2, 3, 4, 30)) {
-          writeLines("")
-          print(paste("lambda index: ", i))
-          writeLines("")
-          cat(paste("Is new_x_train matrix: ", is.matrix(new_x_train)))
-          writeLines("")
-          # cat(non_zero_coef_names)
-          # writeLines("")
-          # cat(non_zero_coef_indices)
-          # writeLines("")
-        }
         if (is.matrix(new_x_train)) {
           traindata = new_x_train[train_indices, ]
           testdata = new_x_train[-train_indices, ]
@@ -92,30 +82,30 @@ myRelaxed = function(train_data, response, cv, print_time) {
         ytrain = response[train_indices]
         ytest = response[-train_indices]
         
-        if(!is.matrix(new_x_train)) {
-          writeLines("")
-          cat("NEW_X_TRAIN NOT MATRIX")
-          writeLines("")
-          cat(length(ytrain))
-          writeLines("")
-          cat(length(traindata))
+        
+        if(is.null(ncol(testdata))) {
+          testdata = as.list(testdata)
+        } else {
+          testdata = as.data.frame.matrix(testdata)
         }
+        
 
-  
         data = data.frame(traindata, ytrain)
         if(length(data) < 3) {
           names(data) = c(non_zero_coef_names, response_name)
+          names(testdata) = non_zero_coef_names
         } else {
           colnames(data) = c(non_zero_coef_names, response_name)
+          colnames(testdata) = non_zero_coef_names
         }
-        
+
         form = as.formula(paste(response_name, "~."))
         fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
-        pred = predict(fit_OLS_on_LASSO_subset, newdata = as.data.frame.matrix(testdata))
-  
+        pred = predict(fit_OLS_on_LASSO_subset, newdata = testdata)
+        
         mse_values[m] = mean((ytest - pred)^2)
       }
-  
+
       MSE = mean(mse_values)
       
       # Format new row of coefficient table for current lambda
@@ -144,9 +134,9 @@ myRelaxed = function(train_data, response, cv, print_time) {
   error = function(e) {
     print(e)
   }
-  # ,
-  # warning = function(w) {
-  # }
+  ,
+  warning = function(w) {
+  }
   )
   if(print_time)
     toc()
@@ -157,6 +147,56 @@ myRelaxed = function(train_data, response, cv, print_time) {
   return (result)
 }
 
+
+generateDataset = function(p, n) {
+  beta = c()
+  for (i in seq(1:(p+1))) {
+    if (i == 1) {
+      beta = c(beta, 1)
+    }
+    else if (i %% 2 == 0) {
+      beta = c(beta, 0)
+    } else {
+      beta = c(beta, 0.5)
+    }
+  }
+  beta = as.matrix(beta)
+  beta_neg = -beta
+  
+  
+  zero_ind1 <- which(beta == 0)
+  nonzero_ind1 <- which(beta != 0)
+  
+  
+  # Generate X (iid case)
+  X <- matrix(rnorm(n*p), nrow = n, ncol = p)
+  X = cbind(rep(1, times = n), X)
+  
+  
+  #Generate Y
+  epsilon <- rnorm(n, sd = 0.5)
+  Y1 = X %*% beta + epsilon
+  Y2 = X %*% beta_neg + epsilon
+  
+  result = list(X = X, Y = Y1)
+  return(result)
+}
+
+
+partitionData = function(x, y) {
+  train_index_y = caret::createDataPartition(y, p = 0.80, list = FALSE)
+  
+  x_train = x[train_index_y, -1]
+  y_train = y[train_index_y]
+  
+  x_test = x[-train_index_y, -1]
+  y_test = y[-train_index_y]
+  
+  result = list(x_train = x_train, y_train = y_train,
+                x_test = x_test, y_test = y_test)
+  
+  return(result)
+}
 
 
 formatCoefficientTableRow = function(non_zero_coefficients, column_names) {
@@ -181,3 +221,241 @@ formatCoefficientTableRow = function(non_zero_coefficients, column_names) {
   }
   return(result)
 }
+
+
+fitAll = function(train_data, response, print_time) {
+  # cv.glmnet with LASSO, cv.glmnet relaxed LASSO, and my relaxed implementation fits
+  fit_Y1 = cv.glmnet(train_data, response, gamma = 0, relax = FALSE)
+  relaxed_fit_Y1 = cv.glmnet(train_data, response, gamma = 0, relax = TRUE)
+  my_relaxed_fit_Y1 = myRelaxed(train_data, response, FALSE, print_time)
+  my_relaxed_fit_cv_Y1 = myRelaxed(train_data, response, TRUE, print_time)
+  
+  # Save lambda values of interest from cv.glmnet LASSO to use for post LASSO fit
+  lambda_min = fit_Y1$lambda.min
+  lambda_1se = fit_Y1$lambda.1se
+  
+  # Post LASSO fits
+  fit_Y1_post_lasso_lambda_min = glmnet(train_data, response, lambda = lambda_min)
+  fit_Y1_post_lasso_lambda_1se = glmnet(train_data, response, lambda = lambda_1se)
+  
+  result = list(cv_glmnet = fit_Y1, cv_glmnet_relaxed = relaxed_fit_Y1, my_relaxed = my_relaxed_fit_Y1,
+                my_relaxed_cv = my_relaxed_fit_cv_Y1, post_lasso_lambda_min = fit_Y1_post_lasso_lambda_min,
+                post_lasso_lambda_1se = fit_Y1_post_lasso_lambda_1se)
+  
+  return(result)
+}
+
+
+computeMSEs = function(resulting_fits, test_data) {
+  
+  pred_fit_min = predict(resulting_fits$cv_glmnet, newx = test_data$x_test, s = resulting_fits$cv_glmnet$lambda.min)
+  pred_fit_1se = predict(resulting_fits$cv_glmnet, newx = test_data$x_test, s = resulting_fits$cv_glmnet$lambda.1se)
+  
+  pred_fit_relaxed_min = predict(resulting_fits$cv_glmnet_relaxed, newx = test_data$x_test, s = resulting_fits$cv_glmnet_relaxed$relaxed$lambda.min)
+  pred_fit_relaxed_1se = predict(resulting_fits$cv_glmnet_relaxed, newx = test_data$x_test, s = resulting_fits$cv_glmnet_relaxed$relaxed$lambda.1se)
+  
+  pred_myRelaxed = predict.lm(resulting_fits$my_relaxed$best_fit, newdata = as.data.frame(test_data$x_test))
+  pred_myRelaxed_cv = predict.lm(resulting_fits$my_relaxed_cv$best_fit, newdata = as.data.frame(test_data$x_test))
+  
+  coefficient_names = rownames(resulting_fits$post_lasso_lambda_min$beta)
+  indices = which(colnames(as.data.frame.matrix(test_data$x_test)) %in% coefficient_names)
+  new_x_test = test_data$x_test[, indices]
+  colnames(new_x_test) = coefficient_names
+  pred_fit_post_lasso_min = predict(resulting_fits$post_lasso_lambda_min, newx = new_x_test)
+  
+  coefficient_names = rownames(resulting_fits$post_lasso_lambda_1se$beta)
+  indices = which(colnames(as.data.frame.matrix(test_data$x_test)) %in% coefficient_names)
+  new_x_test = test_data$x_test[, indices]
+  colnames(new_x_test) = coefficient_names
+  pred_fit_post_lasso_1se = predict(resulting_fits$post_lasso_lambda_1se, newx = new_x_test)
+  
+  
+  
+  # Compute MSE
+  mse_min <- sum((pred_fit_min - test_data$y_test)^2)
+  mse_1se <- sum((pred_fit_1se - test_data$y_test)^2)
+  mse_relaxed_min <- sum((pred_fit_relaxed_min - test_data$y_test)^2)
+  mse_relaxed_1se <- sum((pred_fit_relaxed_1se - test_data$y_test)^2)
+  mse_myRelaxed <- sum((pred_myRelaxed - test_data$y_test)^2)
+  mse_myRelaxed_cv <- sum((pred_myRelaxed_cv - test_data$y_test)^2)
+  mse_post_lasso_min <- sum((pred_fit_post_lasso_min - test_data$y_test)^2)
+  mse_post_lasso_1se <- sum((pred_fit_post_lasso_1se - test_data$y_test)^2)
+  
+  MSEs = data.frame(matrix(nrow = 8, ncol = 2))
+  colnames(MSEs) = c("Model", "Test MSE")
+  
+  model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
+                       "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
+                       "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
+                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+  
+  MSEs[, 1] = model_fit_labels
+  MSEs[, 2] = c(mse_min, mse_1se, mse_relaxed_min, mse_relaxed_1se, mse_myRelaxed, mse_myRelaxed_cv, mse_post_lasso_min, mse_post_lasso_1se)
+  
+  return(MSEs)
+}
+
+
+
+formatCoefficientTable = function(p, n, coefficient_names, resulting_fits, print_time) {
+  model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
+                       "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
+                       "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
+                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+  
+  # Create dataframes to keep track of coefficient values and MSEs per each iteration of simulation
+  coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names)))
+  
+  col_names = rownames(as.data.frame.matrix(coef(resulting_fits$cv_glmnet_relaxed)))
+  coef_values = as.numeric(coef(resulting_fits$post_lasso_lambda_min))
+  coef_names = rownames(coef(resulting_fits$post_lasso_lambda_min))
+  names(coef_values) = coef_names
+  y_post_lasso_lambda_min_coefficient_row = formatCoefficientTableRow(coef_values, col_names)
+  
+  coef_values = as.numeric(coef(resulting_fits$post_lasso_lambda_1se))
+  coef_names = rownames(coef(resulting_fits$post_lasso_lambda_1se))
+  names(coef_values) = coef_names
+  y_post_lasso_lambda_1se_coefficient_row = formatCoefficientTableRow(coef_values, col_names)
+  
+  
+  coefficient_values = rbind(coefficient_values, 
+                             c(0, resulting_fits$cv_glmnet$glmnet.fit$beta[, resulting_fits$cv_glmnet$index[1]]),
+                             c(0, coef(resulting_fits$cv_glmnet)[-1]),
+                             c(0, resulting_fits$cv_glmnet_relaxed$glmnet.fit$relaxed$beta[, resulting_fits$cv_glmnet_relaxed$relaxed$index[1]]),
+                             c(0, coef(resulting_fits$cv_glmnet_relaxed)[-1]),
+                             c(0, resulting_fits$my_relaxed$coefficients[resulting_fits$my_relaxed$min_lambda_index, -1]),
+                             c(0, resulting_fits$my_relaxed_cv$coefficients[resulting_fits$my_relaxed_cv$min_lambda_index, -1]),
+                             c(0, y_post_lasso_lambda_min_coefficient_row),
+                             c(0, y_post_lasso_lambda_1se_coefficient_row))
+  
+  options(digits = 5)
+  colnames(coefficient_values) = coefficient_names
+  coefficient_values[, 1] = model_fit_labels
+  
+  return(coefficient_values)
+}
+
+
+oneIteration = function(p, n, training_data, test_data, print_time) {
+  tryCatch({
+    # Fit training data with different models
+    resulting_fits = fitAll(training_data$x_train, training_data$y_train, FALSE)
+    
+    # Get table of coefficient values for each model
+    coefficient_names = colnames(as.data.frame(training_data$x_train))
+    coefficient_names = c("Model", coefficient_names)
+    coefs = formatCoefficientTable(p, n, coefficient_names, resulting_fits, print_time)
+    
+    # Compute biases
+    MSEs = computeMSEs(resulting_fits, test_data)
+    result = list(coefficient_table = coefs, MSE_table = MSEs)
+    
+    return(result)
+  },
+  error = function(e) {
+    print(e)
+  })
+}
+
+
+
+runSim = function(p, n, N, print_time) {
+  # Generate/split data
+  dataset = generateDataset(p, n)
+  partitioned_data = partitionData(dataset$X, dataset$Y)
+  test_data = partitioned_data[c("x_test", "y_test")]
+  
+  # Run simulation N times
+  sim_replicates = replicate(N, {
+    dataset = generateDataset(p, n)
+    partitioned_data = partitionData(dataset$X, dataset$Y)
+    training_data = partitioned_data[c("x_train", "y_train")]
+    
+    result_one_iter = oneIteration(p, n, training_data, test_data, print_time)
+    
+    result = list(coefficient_table = result_one_iter[[1]], MSE_table = result_one_iter[[2]])
+    
+    return(result)
+  }, simplify = FALSE)
+  
+  
+  #TODO: Fix convoluted method of binding resulting tables from simulation
+  sim_coefficient_results = data.frame(matrix(nrow = 0, ncol = ncol(sim_replicates[[1]][[1]])))
+  sim_MSE_results = data.frame(matrix(nrow = 0, ncol = ncol(sim_replicates[[1]][[2]])))
+  for(i in c(1:N)) {
+    sim_coefficient_results = rbind(sim_coefficient_results, sim_replicates[[i]][[1]])
+    sim_MSE_results = rbind(sim_MSE_results, sim_replicates[[i]][[2]])
+  }
+  
+  return(list(sim_coefficient_table = sim_coefficient_results, sim_MSE_table = sim_MSE_results))
+}
+
+
+
+round_df = function(x, digits) {
+  # round all numeric variables
+  # x: data frame 
+  # digits: number of digits to round
+  numeric_columns <- sapply(x, mode) == 'numeric'
+  x[numeric_columns] <-  round(x[numeric_columns], digits)
+  x
+}
+
+
+formatCoefficientBiasTable = function(sim_results) {
+  betas = c()
+  p = 20
+  for (i in seq(1:p)) {
+    if (i %% 2 != 0) {
+      betas = c(betas, 0)
+    } else {
+      betas = c(betas, 0.5)
+    }
+  }
+  
+  model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
+                       "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
+                       "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
+                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+  
+  bias_table = data.frame(matrix(nrow = 0, ncol = length(sim_results$sim_coefficient_table)))
+  coefficient_names = colnames(as.data.frame(sim_results$sim_coefficient_table))
+  colnames(bias_table) = coefficient_names
+  
+  for (i in model_fit_labels) {
+    average_coef_row = colMeans((sim_results$sim_coefficient_table %>% filter(Model == i))[, -1])
+    average_coef_row = average_coef_row - betas
+    bias_table = rbind(bias_table, c(i, average_coef_row))
+  }
+  colnames(bias_table) = coefficient_names
+  bias_table[, -1] = lapply(bias_table[, -1], as.numeric)
+  
+  options(digits = 5)
+  
+  bias_table[, -1] = round_df(bias_table[, -1], 3)
+  
+  return(bias_table)
+}
+
+
+
+formatAverageTestMSETable = function(sim_results) {
+  model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
+                       "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
+                       "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
+                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+  
+  average_MSE_table = data.frame(matrix(nrow = 0, ncol = 2))
+  colnames(average_MSE_table) = c("Model", "Test MSE")
+  
+  for (i in model_fit_labels) {
+    average_MSE_row = mean((sim_results$sim_MSE_table %>% filter(Model == i))[, -1])
+    average_MSE_table = rbind(average_MSE_table, c(i, average_MSE_row))
+  }
+  colnames(average_MSE_table) = c("Model", "Test MSE")
+  average_MSE_table[, -1] = as.numeric(average_MSE_table[, -1])
+  options(digits = 5)
+  
+  return(average_MSE_table)
+}
+
