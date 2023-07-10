@@ -1,0 +1,9 @@
+"","Model","Test MSE"
+"1","cv.glmnet relax = FALSE, LASSO, lambda min",14.2922171451101
+"2","cv.glmnet relax = FALSE, LASSO, lambda 1se",16.6772755706812
+"3","cv.glmnet relax = TRUE, lambda min",13.5703662151532
+"4","cv.glmnet relax = TRUE, lambda 1se",13.5703706806577
+"5","Relaxed LASSO implementation no CV",14.0639430046553
+"6","Relaxed LASSO implementation CV",13.725925229417
+"7","Post LASSO lambda min",14.2923933509938
+"8","Post LASSO lambda 1se",16.6771969543034
