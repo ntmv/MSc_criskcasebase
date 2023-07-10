@@ -176,13 +176,16 @@ colnames(coefficient_values) = coefficient_names
 ### Fit lasso without cross validation, then OLS on all lambda values
 Per meeting on June 15th, tried fitting LASSO in first iteration without cross validation, took sets of predictors selected with each lambda value tried, then fit OLS on each of those sets, taking the OLS fit with the lowest CV-MSE as the best fit.
 
-``` {r lasso-then-ols-all-predictors, echo = FALSE}
+``` {r lasso-then-ols-all-predictors, echo = FALSE, warnings = FALSE}
 results = myRelaxed(x_train, y_train, FALSE)
+results_cv = myRelaxed(x_train, y_train, TRUE)
 
-col_names = rownames(as.data.frame.matrix(coef(cv_fit_relaxed)))
+
 myRelaxed_coefficient_row = formatCoefficientTableRow(results$coefficients, col_names)
-
 coefficient_values = rbind(coefficient_values, c(0, lapply(myRelaxed_coefficient_row, function(x) round(x, 3))))
+
+myRelaxed_cv_coefficient_row = formatCoefficientTableRow(results_cv$coefficients, col_names)
+coefficient_values = rbind(coefficient_values, c(0, lapply(myRelaxed_cv_coefficient_row, function(x) round(x, 3))))
 colnames(coefficient_values) = coefficient_names
 ```
 
@@ -190,18 +193,18 @@ colnames(coefficient_values) = coefficient_names
 ### Fit lasso with cross validation, then OLS on all lambda values
 Same fit as above but LASSO fit in first iteration is done with cross validation
 
-``` {r lasso-cv-then-ols-all-predictors, echo = FALSE}
-results_cv = myRelaxed(x_train, y_train, TRUE)
-
-col_names = rownames(as.data.frame.matrix(coef(cv_fit_relaxed)))
-myRelaxed_cv_coefficient_row = formatCoefficientTableRow(results_cv$coefficients, col_names)
-
-coefficient_values = rbind(coefficient_values, c(0, lapply(myRelaxed_cv_coefficient_row, function(x) round(x, 3))))
-colnames(coefficient_values) = coefficient_names
+``` {r lasso-cv-then-ols-all-predictors, echo = FALSE, warnings = FALSE}
+# results_cv = myRelaxed(x_train, y_train, TRUE)
+# 
+# col_names = rownames(as.data.frame.matrix(coef(cv_fit_relaxed)))
+# myRelaxed_cv_coefficient_row = formatCoefficientTableRow(results_cv$coefficients, col_names)
+# 
+# coefficient_values = rbind(coefficient_values, c(0, lapply(myRelaxed_cv_coefficient_row, function(x) round(x, 3))))
+# colnames(coefficient_values) = coefficient_names
 ```
 
 ``` {r inspect}
-fit_lasso_cv = cv.glmnet(x_train, y_train, family="gaussian", alpha=1)
+fit_lasso_cv = cv.glmnet(x_train, y_train, family="gaussian", keep=TRUE, alpha=1)
 fit_lasso = glmnet(x_train, y_train, family="gaussian", alpha=1)
 
 
