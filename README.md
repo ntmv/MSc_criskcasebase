@@ -33,3 +33,5 @@ Genome-wide transcriptome profiling and advances in experimental technologies ha
 🎺 The original model is based on the [casebase](https://arxiv.org/abs/2009.10264) paper by Sahir Bhatnagar, Maxime Turgeon, Jesse Islam and James Hanley, which is based on the [sampling methodology](https://www.degruyter.com/document/doi/10.2202/1557-4679.1125/html?lang=en) proposed by James Hanley and Olli Miettinen. 
 
 💻 The optimization for the stochastic gradient descent in `mtool` was written by Dr. Yi Lian.
+
+📌 The relaxed LASSO branch contains a relaxed LASSO implementation for the casebase penalized model (WIP) by Alex Romanus.

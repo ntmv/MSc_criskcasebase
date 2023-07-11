@@ -1,4 +1,0 @@
-"","TP","TN","FP","FN","Sensitivity","Specificity","MCC"
-"casebase.lambda.min",19,76,24,1,0.95,0.76,0.551815323284683
-"cox.lambda.min",19,81,19,1,0.95,0.81,0.608877415673363
-"cens.prop",0.2575,0.355,0.3875,0,0,0,0

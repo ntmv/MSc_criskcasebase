@@ -1,5 +1,20 @@
+##################### Prediction function for casebase penalized model ################
+predict_CompRisk <- function(object, newdata = NULL) {
+  ttob <- terms(object)
+  X <- model.matrix(delete.response(ttob), newdata,
+                    xlev = object@xlevels)
+  coeffs <- matrix(coef(object), nrow = ncol(X),
+                   byrow = TRUE)
+  preds <- X %*% coeffs
+  colnames(preds) <- paste0("log(mu[,",
+                            seq(2, length(object@typeEvents)),
+                            "]/mu[,1])")
+  return(preds)
+}
+
+
 ########################## Survival analysis performance metrics #############
-### Cause-specific cumulative incidence function 
+### Cause-specific cumulative incidence function for penalized case-base fit
 absoluteRisk.CompRisk <- function(object, time, newdata,
                                   method = c("numerical", "montecarlo"),
                                   nsamp = 100, onlyMain = TRUE,
@@ -57,7 +72,7 @@ absoluteRisk.CompRisk <- function(object, time, newdata,
       newdata2[, object@timeVar := knots]
       newdata2[, "offset" := 0]
       # Compute all values for all hazards
-      lambdas <- exp(predict_CompRisk(object, newdata2)) 
+      lambdas <- exp(predict_CompRisk(object, newdata2))
       lambdas[which(lambdas %in% c(Inf, -Inf))] <- 0
       OverallLambda <- rowSums(lambdas)
       survFunction <- exp(-trap_int(knots, OverallLambda))
@@ -157,4 +172,49 @@ absoluteRisk.CompRisk <- function(object, time, newdata,
   
 }
 
+# #' @rdname absoluteRisk
+# #' @export
+absoluteRisk.CompRiskGlmnet <- function(object, time, newdata,
+                                        method = c("numerical", "montecarlo"),
+                                        nsamp = 100, onlyMain = TRUE,
+                                        s = c("lambda.1se", "lambda.min"),
+                                        type = c("CI", "survival"),
+                                        addZero = TRUE, ...) {
+  # The current implementation doesn't work
+  stop(paste("object is of class", class(object),
+             "\nabsoluteRisk should be used with an object of class glm,",
+             "cv.glmnet, gbm, or CompRisk"),
+       call. = TRUE)
+}
 
+#' @importFrom stats coef
+predict_CompRisk <- function(object, newdata = NULL) {
+  ttob <- terms(object)
+  X <- model.matrix(delete.response(ttob), newdata,
+                    contrasts = if (length(object@contrasts)) {
+                      object@contrasts
+                    } else NULL,
+                    xlev = object@xlevels)
+  coeffs <- matrix(coef(object), nrow = ncol(X),
+                   byrow = TRUE)
+  preds <- X %*% coeffs
+  colnames(preds) <- paste0("log(mu[,",
+                            seq(2, length(object@typeEvents)),
+                            "]/mu[,1])")
+  return(preds)
+}
+
+
+
+
+
+# Streamlined version of pracma::cumtrapz
+trap_int <- function(x, y) {
+  x <- as.matrix(c(x))
+  m <- length(x)
+  y <- as.matrix(y)
+  n <- ncol(y)
+  dt <- kronecker(matrix(1, 1, n), 0.5 * diff(x))
+  ct <- apply(dt * (y[1:(m - 1), ] + y[2:m, ]), 2, cumsum)
+  return(rbind(0, ct))
+}
