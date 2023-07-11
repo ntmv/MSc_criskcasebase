@@ -4,9 +4,9 @@ library(caret)
 #' Fits linear regression using relaxed LASSO regularization to given data
 #' @param: train_data - dataframe containing values of features
 #' @param: response - list of response values
-#' @param: cv - boolean indicating whether to fit lasso with cross validation or not
+#' @param: folds - number of folds used to compute cross validation MSE (default is 5)
 #' @param: print_time - boolean indicating whether to print time function takes to run
-myRelaxed = function(train_data, response, cv, print_time) {
+myRelaxedGlmnetFolds = function(train_data, response, folds = 5, print_time) {
   tryCatch({ 
     if(print_time)
       tic()
@@ -19,15 +19,9 @@ myRelaxed = function(train_data, response, cv, print_time) {
     colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
     MSEs_all_lambda = c()
     
-    if (cv) {
-      fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, alpha=1)
-      all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
-    }
-    else {
-      fit_lasso = glmnet(train_data, response, family="gaussian", alpha=1)
-      all_coef_fit_lasso = as.data.frame.matrix(coef(fit_lasso))[-1, ]
-    }
-  
+    fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, nfolds = folds, alpha=1)
+    all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
+
     # Local variables to track lowest CV-MSE, best fit, and index of lambda of lowest MSE while iterating over all lambdas
     current_MSE = .Machine$double.xmax;
     best_fit = lm(1~1)
@@ -60,18 +54,14 @@ myRelaxed = function(train_data, response, cv, print_time) {
       # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
       
       #Perform cross-validation
-      k = 5
-      folds <- createFolds(response, k = k, list = TRUE, returnTrain = TRUE)
-      res = list()
+      
+      fold_ids = fit_lasso$foldid
       mse_values = c()
-      for(m in 1:k) {
-        train_indices <- folds[[m]]
-        # TODO: Fix code so column names
-        # if(is.numeric(new_x_train)) {
-        #   names(new_x_train) = c(non_zero_coef_names)
-        # } else {
-        #   colnames(new_x_train) = c(non_zero_coef_names)
-        # }
+      
+      for(m in c(1:folds)) {
+        train_indices = which(fold_ids != m)
+
+        # Check if new training data includes one or more covariates to make sure it is subsetted as a matrix or a list correctly
         if (is.matrix(new_x_train)) {
           traindata = new_x_train[train_indices, ]
           testdata = new_x_train[-train_indices, ]
@@ -82,7 +72,7 @@ myRelaxed = function(train_data, response, cv, print_time) {
         ytrain = response[train_indices]
         ytest = response[-train_indices]
         
-        
+        # Check what type to treat validation data as
         if(is.null(ncol(testdata))) {
           testdata = as.list(testdata)
         } else {
@@ -146,6 +136,304 @@ myRelaxed = function(train_data, response, cv, print_time) {
                 best_fit = best_fit)
   return (result)
 }
+
+
+
+#' Fits linear regression using relaxed LASSO regularization to given data
+#' @param: train_data - dataframe containing values of features
+#' @param: response - list of response values
+#' @param: folds - number of folds used to compute cross validation MSE (default is 5)
+#' @param: print_time - boolean indicating whether to print time function takes to run
+myRelaxedCustomFolds = function(train_data, response, cv, folds = 5, print_time) {
+  tryCatch({ 
+    if(print_time)
+      tic()
+    
+    
+    # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
+    
+    #Perform cross-validation
+    folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
+    res = list()
+    mse_values = c()
+    for(m in 1:folds) {
+      train_indices <- folds_list[[m]]
+
+      if (is.matrix(new_x_train)) {
+        traindata = new_x_train[train_indices, ]
+        testdata = new_x_train[-train_indices, ]
+      } else {
+        traindata = new_x_train[train_indices]
+        testdata = new_x_train[-train_indices]
+      }
+      ytrain = response[train_indices]
+      ytest = response[-train_indices]
+      
+      fit_lasso = glmnet(traindata, ytrain, family="gaussian", alpha=1)
+      all_coef_fit_lasso = as.data.frame.matrix(coef(fit_lasso))[-1, ]
+      
+      
+      
+      if(is.null(ncol(testdata))) {
+        testdata = as.list(testdata)
+      } else {
+        testdata = as.data.frame.matrix(testdata)
+      }
+      
+      
+      data = data.frame(traindata, ytrain)
+      if(length(data) < 3) {
+        names(data) = c(non_zero_coef_names, response_name)
+        names(testdata) = non_zero_coef_names
+      } else {
+        colnames(data) = c(non_zero_coef_names, response_name)
+        colnames(testdata) = non_zero_coef_names
+      }
+      
+      form = as.formula(paste(response_name, "~."))
+      fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
+      pred = predict(fit_OLS_on_LASSO_subset, newdata = testdata)
+      
+      mse_values[m] = mean((ytest - pred)^2)
+    }
+    
+    coefficient_names = colnames(as.data.frame(train_data))
+    response_name = names(as.data.frame(response))
+    
+    # Data frame and list to keep track of coefficients and CV-MSEs of all lambdas
+    coefs_all_lambdas = data.frame(matrix(nrow = 1, ncol = length(coefficient_names) + 1))
+    colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
+    MSEs_all_lambda = c()
+    
+    if (cv) {
+      fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, alpha=1)
+      all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
+    }
+    else {
+    }
+    
+    # Local variables to track lowest CV-MSE, best fit, and index of lambda of lowest MSE while iterating over all lambdas
+    current_MSE = .Machine$double.xmax;
+    best_fit = lm(1~1)
+    best_lambda_index = 0
+    
+    # Iterate over all lambdas
+    indices = c(1:length(all_coef_fit_lasso))
+    
+    for(i in indices) {
+      rows = nrow(coefs_all_lambdas)
+      current_coef = all_coef_fit_lasso[i]
+      non_zero_coef = current_coef[all_coef_fit_lasso[i] != 0]
+      all_zeros = length(non_zero_coef) == 0
+      
+      # If no predictors selected, skip OLS with cross validation and continue with next lambda
+      if (all_zeros){
+        coefs_all_lambdas[rows,] = 0
+        next
+      }
+      
+      
+      # TODO: Look into using predict() with type = "nonzero" as a way to get nonzero coefficients from a glmnet fit for particular lambda values
+      # (might be more efficent that using which and subsetting the whole training set, then refitting with lm())
+      
+      # Create new training dataframe to pass to lm() for OLS fit on selected predictors
+      non_zero_coef_indices = which(current_coef != 0)
+      non_zero_coef_names = coefficient_names[non_zero_coef_indices]
+      new_x_train = train_data[, non_zero_coef_indices]
+      
+      
+      
+      MSE = mean(mse_values)
+      
+      # Format new row of coefficient table for current lambda
+      coefs_all_lambdas[rows+1,] = 0
+      j = 1
+      
+      for (l in c(1:length(coefs_all_lambdas))) {
+        if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
+          break
+        if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
+          coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
+          j = j + 1
+        }
+      } 
+      
+      MSEs_all_lambda = rbind(MSEs_all_lambda, MSE)
+      
+      if(MSE < current_MSE) {
+        current_MSE = MSE
+        best_fit = fit_OLS_on_LASSO_subset
+        best_lambda_index = i
+      }
+    }
+  }
+  ,
+  error = function(e) {
+    print(e)
+  }
+  ,
+  warning = function(w) {
+  }
+  )
+  if(print_time)
+    toc()
+  
+  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
+                min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
+                best_fit = best_fit)
+  return (result)
+}
+
+
+
+
+#' Fits linear regression using relaxed LASSO regularization to given data
+#' @param: train_data - dataframe containing values of features
+#' @param: response - list of response values
+#' @param: cv - boolean indicating whether to fit lasso with cross validation or not
+#' @param: print_time - boolean indicating whether to print time function takes to run
+myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
+  tryCatch({ 
+    if(print_time)
+      tic()
+    
+    coefficient_names = colnames(as.data.frame(train_data))
+    response_name = names(as.data.frame(response))
+    
+    # Data frame and list to keep track of coefficients and CV-MSEs of all lambdas
+    coefs_all_lambdas = data.frame(matrix(nrow = 1, ncol = length(coefficient_names) + 1))
+    colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
+    MSEs_all_lambda = c()
+    
+    if (cv) {
+      fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, alpha=1)
+      all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
+    }
+    else {
+      fit_lasso = glmnet(train_data, response, family="gaussian", alpha=1)
+      all_coef_fit_lasso = as.data.frame.matrix(coef(fit_lasso))[-1, ]
+    }
+    
+    # Local variables to track lowest CV-MSE, best fit, and index of lambda of lowest MSE while iterating over all lambdas
+    current_MSE = .Machine$double.xmax;
+    best_fit = lm(1~1)
+    best_lambda_index = 0
+    
+    # Iterate over all lambdas
+    indices = c(1:length(all_coef_fit_lasso))
+    
+    for(i in indices) {
+      rows = nrow(coefs_all_lambdas)
+      current_coef = all_coef_fit_lasso[i]
+      non_zero_coef = current_coef[all_coef_fit_lasso[i] != 0]
+      all_zeros = length(non_zero_coef) == 0
+      
+      # If no predictors selected, skip OLS with cross validation and continue with next lambda
+      if (all_zeros){
+        coefs_all_lambdas[rows,] = 0
+        next
+      }
+      
+      
+      # TODO: Look into using predict() with type = "nonzero" as a way to get nonzero coefficients from a glmnet fit for particular lambda values
+      # (might be more efficent that using which and subsetting the whole training set, then refitting with lm())
+      
+      # Create new training dataframe to pass to lm() for OLS fit on selected predictors
+      non_zero_coef_indices = which(current_coef != 0)
+      non_zero_coef_names = coefficient_names[non_zero_coef_indices]
+      new_x_train = train_data[, non_zero_coef_indices]
+      
+      # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
+      
+      #Perform cross-validation
+      folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
+      res = list()
+      mse_values = c()
+      for(m in 1:folds) {
+        train_indices <- folds_list[[m]]
+        # TODO: Fix code so column names
+        # if(is.numeric(new_x_train)) {
+        #   names(new_x_train) = c(non_zero_coef_names)
+        # } else {
+        #   colnames(new_x_train) = c(non_zero_coef_names)
+        # }
+        if (is.matrix(new_x_train)) {
+          traindata = new_x_train[train_indices, ]
+          testdata = new_x_train[-train_indices, ]
+        } else {
+          traindata = new_x_train[train_indices]
+          testdata = new_x_train[-train_indices]
+        }
+        ytrain = response[train_indices]
+        ytest = response[-train_indices]
+        
+        
+        if(is.null(ncol(testdata))) {
+          testdata = as.list(testdata)
+        } else {
+          testdata = as.data.frame.matrix(testdata)
+        }
+        
+        
+        data = data.frame(traindata, ytrain)
+        if(length(data) < 3) {
+          names(data) = c(non_zero_coef_names, response_name)
+          names(testdata) = non_zero_coef_names
+        } else {
+          colnames(data) = c(non_zero_coef_names, response_name)
+          colnames(testdata) = non_zero_coef_names
+        }
+        
+        form = as.formula(paste(response_name, "~."))
+        fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
+        pred = predict(fit_OLS_on_LASSO_subset, newdata = testdata)
+        
+        mse_values[m] = mean((ytest - pred)^2)
+      }
+      
+      MSE = mean(mse_values)
+      
+      # Format new row of coefficient table for current lambda
+      coefs_all_lambdas[rows+1,] = 0
+      j = 1
+      
+      for (l in c(1:length(coefs_all_lambdas))) {
+        if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
+          break
+        if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
+          coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
+          j = j + 1
+        }
+      } 
+      
+      MSEs_all_lambda = rbind(MSEs_all_lambda, MSE)
+      
+      if(MSE < current_MSE) {
+        current_MSE = MSE
+        best_fit = fit_OLS_on_LASSO_subset
+        best_lambda_index = i
+      }
+    }
+  }
+  ,
+  error = function(e) {
+    print(e)
+  }
+  ,
+  warning = function(w) {
+  }
+  )
+  if(print_time)
+    toc()
+  
+  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
+                min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
+                best_fit = best_fit)
+  return (result)
+}
+
+
+
 
 
 generateDataset = function(p, n) {
@@ -223,24 +511,26 @@ formatCoefficientTableRow = function(non_zero_coefficients, column_names) {
 }
 
 
-fitAll = function(train_data, response, print_time) {
+fitAll = function(train_data, response, folds = 5, print_time) {
   # cv.glmnet with LASSO, cv.glmnet relaxed LASSO, and my relaxed implementation fits
-  fit_Y1 = cv.glmnet(train_data, response, gamma = 0, relax = FALSE)
-  relaxed_fit_Y1 = cv.glmnet(train_data, response, gamma = 0, relax = TRUE)
-  my_relaxed_fit_Y1 = myRelaxed(train_data, response, FALSE, print_time)
-  my_relaxed_fit_cv_Y1 = myRelaxed(train_data, response, TRUE, print_time)
+  fit = cv.glmnet(train_data, response, gamma = 0, nfolds = folds, relax = FALSE)
+  relaxed_fit = cv.glmnet(train_data, response, gamma = 0, nfolds = folds, relax = TRUE)
+  my_relaxed_fit = myRelaxedOld(train_data, response, FALSE, folds = folds, print_time)
+  my_relaxed_fit_cv = myRelaxedOld(train_data, response, TRUE, folds = folds, print_time)
+  my_relaxed_new_fit_cv = myRelaxedGlmnetFolds(train_data, response, folds = folds, print_time)
+  
   
   # Save lambda values of interest from cv.glmnet LASSO to use for post LASSO fit
-  lambda_min = fit_Y1$lambda.min
-  lambda_1se = fit_Y1$lambda.1se
+  lambda_min = fit$lambda.min
+  lambda_1se = fit$lambda.1se
   
   # Post LASSO fits
-  fit_Y1_post_lasso_lambda_min = glmnet(train_data, response, lambda = lambda_min)
-  fit_Y1_post_lasso_lambda_1se = glmnet(train_data, response, lambda = lambda_1se)
+  fit_post_lasso_lambda_min = glmnet(train_data, response, lambda = lambda_min)
+  fit_post_lasso_lambda_1se = glmnet(train_data, response, lambda = lambda_1se)
   
-  result = list(cv_glmnet = fit_Y1, cv_glmnet_relaxed = relaxed_fit_Y1, my_relaxed = my_relaxed_fit_Y1,
-                my_relaxed_cv = my_relaxed_fit_cv_Y1, post_lasso_lambda_min = fit_Y1_post_lasso_lambda_min,
-                post_lasso_lambda_1se = fit_Y1_post_lasso_lambda_1se)
+  result = list(cv_glmnet = fit, cv_glmnet_relaxed = relaxed_fit, my_relaxed = my_relaxed_fit,
+                my_relaxed_cv = my_relaxed_fit_cv, my_relaxed_new = my_relaxed_new_fit_cv, 
+                post_lasso_lambda_min = fit_post_lasso_lambda_min, post_lasso_lambda_1se = fit_post_lasso_lambda_1se)
   
   return(result)
 }
@@ -256,6 +546,7 @@ computeMSEs = function(resulting_fits, test_data) {
   
   pred_myRelaxed = predict.lm(resulting_fits$my_relaxed$best_fit, newdata = as.data.frame(test_data$x_test))
   pred_myRelaxed_cv = predict.lm(resulting_fits$my_relaxed_cv$best_fit, newdata = as.data.frame(test_data$x_test))
+  pred_myRelaxed_new_cv = predict.lm(resulting_fits$my_relaxed_new$best_fit, newdata = as.data.frame(test_data$x_test))
   
   coefficient_names = rownames(resulting_fits$post_lasso_lambda_min$beta)
   indices = which(colnames(as.data.frame.matrix(test_data$x_test)) %in% coefficient_names)
@@ -278,19 +569,21 @@ computeMSEs = function(resulting_fits, test_data) {
   mse_relaxed_1se <- sum((pred_fit_relaxed_1se - test_data$y_test)^2)
   mse_myRelaxed <- sum((pred_myRelaxed - test_data$y_test)^2)
   mse_myRelaxed_cv <- sum((pred_myRelaxed_cv - test_data$y_test)^2)
+  mse_myRelaxed_new_cv <- sum((pred_myRelaxed_new_cv - test_data$y_test)^2)
   mse_post_lasso_min <- sum((pred_fit_post_lasso_min - test_data$y_test)^2)
   mse_post_lasso_1se <- sum((pred_fit_post_lasso_1se - test_data$y_test)^2)
   
-  MSEs = data.frame(matrix(nrow = 8, ncol = 2))
+  MSEs = data.frame(matrix(nrow = 9, ncol = 2))
   colnames(MSEs) = c("Model", "Test MSE")
   
   model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
                        "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
                        "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
-                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+                       "Relaxed LASSO glmnet folds implementation", "Post LASSO lambda min", "Post LASSO lambda 1se")
   
   MSEs[, 1] = model_fit_labels
-  MSEs[, 2] = c(mse_min, mse_1se, mse_relaxed_min, mse_relaxed_1se, mse_myRelaxed, mse_myRelaxed_cv, mse_post_lasso_min, mse_post_lasso_1se)
+  MSEs[, 2] = c(mse_min, mse_1se, mse_relaxed_min, mse_relaxed_1se, mse_myRelaxed, mse_myRelaxed_cv,
+                mse_myRelaxed_new_cv, mse_post_lasso_min, mse_post_lasso_1se)
   
   return(MSEs)
 }
@@ -301,7 +594,7 @@ formatCoefficientTable = function(p, n, coefficient_names, resulting_fits, print
   model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
                        "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
                        "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
-                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+                       "Relaxed LASSO glmnet folds implementation", "Post LASSO lambda min", "Post LASSO lambda 1se")
   
   # Create dataframes to keep track of coefficient values and MSEs per each iteration of simulation
   coefficient_values = data.frame(matrix(nrow = 0, ncol = length(coefficient_names)))
@@ -325,6 +618,7 @@ formatCoefficientTable = function(p, n, coefficient_names, resulting_fits, print
                              c(0, coef(resulting_fits$cv_glmnet_relaxed)[-1]),
                              c(0, resulting_fits$my_relaxed$coefficients[resulting_fits$my_relaxed$min_lambda_index, -1]),
                              c(0, resulting_fits$my_relaxed_cv$coefficients[resulting_fits$my_relaxed_cv$min_lambda_index, -1]),
+                             c(0, resulting_fits$my_relaxed_new$coefficients[resulting_fits$my_relaxed_new$min_lambda_index, -1]),
                              c(0, y_post_lasso_lambda_min_coefficient_row),
                              c(0, y_post_lasso_lambda_1se_coefficient_row))
   
@@ -339,7 +633,7 @@ formatCoefficientTable = function(p, n, coefficient_names, resulting_fits, print
 oneIteration = function(p, n, training_data, test_data, print_time) {
   tryCatch({
     # Fit training data with different models
-    resulting_fits = fitAll(training_data$x_train, training_data$y_train, FALSE)
+    resulting_fits = fitAll(training_data$x_train, training_data$y_train, folds = 5, FALSE)
     
     # Get table of coefficient values for each model
     coefficient_names = colnames(as.data.frame(training_data$x_train))
@@ -416,7 +710,7 @@ formatCoefficientBiasTable = function(sim_results) {
   model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
                        "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
                        "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
-                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+                       "Relaxed LASSO glmnet folds implementation", "Post LASSO lambda min", "Post LASSO lambda 1se")
   
   bias_table = data.frame(matrix(nrow = 0, ncol = length(sim_results$sim_coefficient_table)))
   coefficient_names = colnames(as.data.frame(sim_results$sim_coefficient_table))
@@ -443,7 +737,7 @@ formatAverageTestMSETable = function(sim_results) {
   model_fit_labels = c("cv.glmnet relax = FALSE, LASSO, lambda min", "cv.glmnet relax = FALSE, LASSO, lambda 1se", 
                        "cv.glmnet relax = TRUE, lambda min", "cv.glmnet relax = TRUE, lambda 1se", 
                        "Relaxed LASSO implementation no CV", "Relaxed LASSO implementation CV", 
-                       "Post LASSO lambda min", "Post LASSO lambda 1se")
+                       "Relaxed LASSO glmnet folds implementation", "Post LASSO lambda min", "Post LASSO lambda 1se")
   
   average_MSE_table = data.frame(matrix(nrow = 0, ncol = 2))
   colnames(average_MSE_table) = c("Model", "Test MSE")
