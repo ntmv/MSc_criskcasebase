@@ -29,28 +29,6 @@ library(dplyr)
 source("src/helper_functions.R")
 ```
 
-``` {r practice, warning = FALSE, echo = FALSE}
-# p = 20
-# n = 400
-# 
-# dataset = generateDataset(p, n)
-# partitioned_data = partitionData(dataset$X, dataset$Y)
-# training_data = partitioned_data[c("x_train", "y_train")]
-# 
-# res = myRelaxedGlmnetFolds(training_data$x_train, training_data$y_train, folds = 5, TRUE)
-# 
-# resulting_fits = fitAll(training_data$x_train, training_data$y_train, FALSE)
-# 
-# # Get table of coefficient values for each model
-# coefficient_names = colnames(as.data.frame(training_data$x_train))
-# coefficient_names = c("Model", coefficient_names)
-# coefs = formatCoefficientTable(p, n, coefficient_names, resulting_fits, print_time)
-# 
-# # Compute biases
-# MSEs = computeMSEs(resulting_fits, test_data)
-# result = list(coefficient_table = coefs, MSE_table = MSEs)
-```
-
 
 # Run simulation
 ``` {r run-sim, warning = FALSE, echo = FALSE}
@@ -73,6 +51,7 @@ formatCoefficientBiasTable(sim_results)
 
 ``` {r resulting-MSEs, echo=FALSE}
 formatAverageTestMSETable(sim_results)
+# results_table
 ```
 
 # CV MSE plot by log lambda
