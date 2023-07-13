@@ -88,28 +88,6 @@ res_cox_min1 <- varsel_perc(cc_min, beta1)
 # let's calculate the bias for all the competitors as well (a task could be turning this one line into a function as well)
 # Only for the true non-zero variables
 cox_mse1 <- mse_bias(cc_min, beta1)
-########################## Cause 2 #####################################
-# Censor competing event
-y_train <- Surv(time = train$ftime, event = train$fstatus == 2)
-
-x_train <- model.matrix(~ . -ftime -fstatus, data = train)[, -1] 
-
-# Censor competing event
-y_test <- Surv(time = test$ftime, event = test$fstatus == 2)
-
-x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
-
-# Fit cause-specific cox model with glmnet on training set 
-cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7)
-
-# Fit on validation set 
-cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
-                      lambda = cox_mod$lambda.min)
-
-cc_min <- coef(cox_val_min)
-
-# Function to output variable selection performance metrics
-res_cox_min2 <- varsel_perc(cc_min, beta2)
 
 ########################## Fit PenCR model ##################################
 penCR = cv.glmnet.CR(data = train, family="cox", alpha= 0.7, standardize= TRUE,
@@ -128,11 +106,8 @@ cc_min_penCR1 <- coef(penCR_val_min1)
 penCR_val_min2 <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
                          lambda = cc_min_penCR2)
 
-
-cc_min_penCR2 <- coef(penCR_val_min2)
-
 res_pencr_min1 <- varsel_perc(cc_min_penCR1, beta1)
-res_pencr_min2 <- varsel_perc(cc_min_penCR2, beta2)
+
 
 # Calculate MSE here as well (try and fill it out!)
 penCR_mse1 <-mse_bias(cc_min_penCR1, beta1)
