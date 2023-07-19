@@ -15,7 +15,7 @@ library(Matrix)
 library(dplyr)
 
 # Helper functions 
-source("src/helper_functions.R")
+source("../src/helper_functions.R")
 
 # Run simulation
 sim_results = runSim(20, 400, 1000, TRUE)
@@ -27,5 +27,5 @@ bias_table = formatCoefficientBiasTable(sim_results)
 # Get average test prediction MSE
 prediction_MSE_table = formatAverageTestMSETable(sim_results)
 
-write.csv(bias_table, file = "results/iid_coefficient_relaxed.csv")
-write.csv(prediction_MSE_table, file = "results/iid_MSE_relaxed.csv")
+write.csv(bias_table, file = paste("results/", as.character(runif(1)), "iid_coefficient_relaxed.csv"))
+write.csv(prediction_MSE_table, file = paste("results/", as.character(runif(1)), "_iid_MSE_relaxed.csv"))
