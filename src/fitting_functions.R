@@ -33,31 +33,31 @@ multi_deviance <- function(cb_data, fit_object) {
 #' @return List of 4 elements, containing the necessary data to fit a case-base
 #'   regression model.
 create_cbDataset <- function(surv_obj, cov_matrix, ratio = 5) {
-    n <- nrow(surv_obj)
-    B <- sum(surv_obj[, "time"])
-    c1 <- sum(surv_obj[, "status"] == 1)
-    c2 <- sum(surv_obj[, "status"] == 2)
-    b <- ratio * (c1)
-    offset <- log(B/b)
-    prob_select <-  surv_obj[, "time"]/B
-    # Create base series
-    which_pm <- sample(n, b, replace = TRUE, prob = prob_select)
-    bSeries <- as.matrix(surv_obj[which_pm, ])
-    time_bseries <- runif(b) * bSeries[, "time"]
-    cov_bseries <- cov_matrix[which_pm, , drop = FALSE]
-    event_bseries <- rep(0L, nrow(bSeries))
-    # Extract case series
-    cSeries <- as.matrix(surv_obj[surv_obj[,"status"] != 0L, ])
-    time_cseries <- cSeries[,"time"]
-    cov_cseries <- cov_matrix[surv_obj[,"status"] != 0L, , drop = FALSE]
-    event_cseries <- cSeries[,"status"]
-    # Combine and return
-    output <- list("time" = c(time_bseries, time_cseries),
-                   "event_ind" = c(event_bseries, event_cseries),
-                   "covariates" = rbind(cov_bseries, cov_cseries),
-                   "offset" = rep(offset, nrow(bSeries) + nrow(cSeries)))
-    
-    return(output)
+  n <- nrow(surv_obj)
+  B <- sum(surv_obj[, "time"])
+  c1 <- sum(surv_obj[, "status"] == 1)
+  c2 <- sum(surv_obj[, "status"] == 2)
+  b <- ratio * (c1)
+  offset <- log(B/b)
+  prob_select <-  surv_obj[, "time"]/B
+  # Create base series
+  which_pm <- sample(n, b, replace = TRUE, prob = prob_select)
+  bSeries <- as.matrix(surv_obj[which_pm, ])
+  time_bseries <- runif(b) * bSeries[, "time"]
+  cov_bseries <- cov_matrix[which_pm, , drop = FALSE]
+  event_bseries <- rep(0L, nrow(bSeries))
+  # Extract case series
+  cSeries <- as.matrix(surv_obj[surv_obj[,"status"] != 0L, ])
+  time_cseries <- cSeries[,"time"]
+  cov_cseries <- cov_matrix[surv_obj[,"status"] != 0L, , drop = FALSE]
+  event_cseries <- cSeries[,"status"]
+  # Combine and return
+  output <- list("time" = c(time_bseries, time_cseries),
+                 "event_ind" = c(event_bseries, event_cseries),
+                 "covariates" = rbind(cov_bseries, cov_cseries),
+                 "offset" = rep(offset, nrow(bSeries) + nrow(cSeries)))
+  
+  return(output)
 }
 
 ################################################
@@ -66,24 +66,24 @@ create_cbDataset <- function(surv_obj, cov_matrix, ratio = 5) {
 #' @param cb_data Output of \code{create_cbDataset}
 fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
                         lambda, alpha = 0.5, unpen_cov = 2) {
-    stopifnot(alpha >= 0 && alpha <= 1)
-    # Elastic-net reparametrization
-    lambda1 <- lambda*alpha
-    lambda2 <- 0.5*lambda*(1 - alpha)
-    # Prepare covariate matrix with intercept
-    X <- as.matrix(cbind(cb_data$covariates, 1))
-    out <- fit.mtool <- mtool::mtool.MNlogistic(
-        X = as.matrix(X),
-        Y = cb_data$event_ind,
-        offset = cb_data$offset,
-        N_covariates = unpen_cov,
-        regularization = 'elastic-net',
-        transpose = FALSE,
-        lambda1 = lambda1, lambda2 = lambda2, 
-        lambda3 = 0
-        )
-    
-    return(out)
+  stopifnot(alpha >= 0 && alpha <= 1)
+  # Elastic-net reparametrization
+  lambda1 <- lambda*alpha
+  lambda2 <- 0.5*lambda*(1 - alpha)
+  # Prepare covariate matrix with intercept
+  X <- as.matrix(cbind(cb_data$covariates, 1))
+  out <- fit.mtool <- mtool::mtool.MNlogistic(
+    X = as.matrix(X),
+    Y = cb_data$event_ind,
+    offset = cb_data$offset,
+    N_covariates = unpen_cov,
+    regularization = 'elastic-net',
+    transpose = FALSE,
+    lambda1 = lambda1, lambda2 = lambda2, 
+    lambda3 = 0
+  )
+  
+  return(out)
 }
 
 
@@ -94,30 +94,32 @@ fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
 #' @param rho Correlation parameter
 #' @return pxp matrix whose (i,j) entry is rho^abs(i - j).
 covAR1 <- function(p, rho) {
-    stopifnot(p >= 2 && rho >= 0)
-    # https://statisticaloddsandends.wordpress.com/2020/02/07/generating-correlation-matrix-for-ar1-model/
-    exponent <- abs(matrix(1:p - 1, nrow = p, ncol = p, byrow = TRUE) - 
-                        (1:p - 1))
-    
-    return(rho^exponent)
+  stopifnot(p >= 2 && rho >= 0)
+  # https://statisticaloddsandends.wordpress.com/2020/02/07/generating-correlation-matrix-for-ar1-model/
+  exponent <- abs(matrix(1:p - 1, nrow = p, ncol = p, byrow = TRUE) - 
+                    (1:p - 1))
+  
+  return(rho^exponent)
 }
 
 ###########################################################
 #' Cross-validation function for mtool 
-mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                               constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
-    ncores = parallelly::availableCores(), seed = NULL) {
-  repeat {
-   # Default lambda grid
+                              ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
+  surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+  cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
+  # Create case-base dataset
+  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
+  # Default lambda grid
   if(is.null(lambda_max)) {
     # Lambda max grid for bisection search 
     if(is.null(initial_max_grid)) {
-      initial_max_grid <- 
-        c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
+      initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
       fit_val_max <- mclapply(initial_max_grid, 
-                               function(lambda_val) {
-                                 fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = 4)
+                              function(lambda_val) {
+                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                            lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
       non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
       if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
         warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
@@ -150,40 +152,45 @@ mtool.multinom.cv <- function(cb_data_train, regularization = 'elastic-net', lam
     test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
     # Create X and Y
     train_cv <- list("time" = train_cv$time,
-         "event_ind" = train_cv$event_ind,
-         "covariates" = train_cv[, grepl("covariates", names(train_cv))],
-         "offset" = train_cv$offset)
+                     "event_ind" = train_cv$event_ind,
+                     "covariates" = train_cv[, grepl("covariates", names(train_cv))],
+                     "offset" = train_cv$offset)
+    # Standardize
+    train_cv$covariates <- as.data.frame(scale(train_cv$covariates, center = T, scale = T))
     cvs_res <- mclapply(lambdagrid, 
-      function(lambda_val) {
-      fit_cbmodel(train_cv, regularization = 'elastic-net',
-                  lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
-    }, mc.cores = ncores, mc.set.seed = seed)
+                        function(lambda_val) {
+                          fit_cbmodel(train_cv, regularization = 'elastic-net',
+                                      lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
+                        }, mc.cores = ncores, mc.set.seed = seed)
     test_cv <- list("time" = test_cv$covariates.time,
                     "event_ind" = test_cv$event_ind,
                     "covariates" = as.matrix(test_cv[, grepl("covariates", names(test_cv))]),
                     "offset" = test_cv$offset)
+    # Standardize
+    test_cv$covariates <- as.data.frame(scale(test_cv$covariates, center = T, scale = T))
     mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
     all_deviances[, i] <- mult_deviance
-    mean_dev <- rowMeans(all_deviances)
-    lambda.min <- lambdagrid[which.min(mean_dev)]
-    cv_se <- sqrt(var(mean_dev))
-    dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
-    dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
-    range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
-    lambda.1se <- max(range.1se)
-    lambda.min1se <- min(range.1se)
-    range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
-    lambda.0.5se <- max(range.0.5se)
-    lambda.min0.5se <- min(range.0.5se)
     non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
-    rownames(all_deviances) <- lambdagrid
-    rownames(non_zero_coefs) <- lambdagrid
+    cat("Completed Fold", i, "\n")
   }
-  if (lambda.min != lambda_max) {
-    break
+  mean_dev <- rowMeans(all_deviances)
+  lambda.min <- lambdagrid[which.min(mean_dev)]
+  sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
+  if (sel_lambda_min  == 2*constant_covariates) {
+    cat("Null model chosen: choosing first non-null model lambda")
+    lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
   }
-  message("lambda.min is equal to lambda.max. Re-running the function.")
-  }
+  cv_se <- sqrt(var(mean_dev))
+  dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
+  dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
+  range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
+  lambda.1se <- max(range.1se)
+  lambda.min1se <- min(range.1se)
+  range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
+  lambda.0.5se <- max(range.0.5se)
+  lambda.min0.5se <- min(range.0.5se)
+  rownames(all_deviances) <- lambdagrid
+  rownames(non_zero_coefs) <- lambdagrid
   return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
               lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances))
 }
@@ -229,7 +236,7 @@ varsel_perc <- function(model_coef, true_coef) {
 ###############################################################################
 #' # Simulate from sub-distribution hazards
 cause_subdist_sim <- function(n, p, beta1, beta2, num.true = 20, mix_p = 0.5
-                                     , cor_vals = c(0.7, 0.4, 0.6, 0.5), noise_cor = 0.1, 
+                              , cor_vals = c(0.7, 0.4, 0.6, 0.5), noise_cor = 0.1, 
                               nblocks = 4,  rho1 = 4, u.max = 1, lambda1 = 1, lambda2 = 0.8, rho2 = 10, max_time = 2) {
   # Warnings
   if(length(beta1) != length(beta2)) stop("Dimension of beta1 and beta2 should be the same")
@@ -276,15 +283,15 @@ cause_subdist_sim <- function(n, p, beta1, beta2, num.true = 20, mix_p = 0.5
   t2 <- abs(t2)
   ftime[c.ind == 1] <- t1
   ftime[c.ind == 2] <- t2
- ci <- runif(n, min = 0, max = u.max)
-ftime <- pmin(ftime, ci)
-fstatus <- ifelse(ftime == ci, 0, 1)
-fstatus <- fstatus * c.ind
-# Fixing large values of t (to make sure it is within 1-year study range)
-fstatus <- ifelse(ftime >= max_time, 0, fstatus)
-ftime <- ifelse(ftime >= max_time, max_time, ftime)
-ftime[ftime==   max_time] <- ftime[ftime == max_time] + 
-  rnorm(length(max_time[max_time == 1]), mean = 0, sd = 1e-4)
+  ci <- runif(n, min = 0, max = u.max)
+  ftime <- pmin(ftime, ci)
+  fstatus <- ifelse(ftime == ci, 0, 1)
+  fstatus <- fstatus * c.ind
+  # Fixing large values of t (to make sure it is within 1-year study range)
+  fstatus <- ifelse(ftime >= max_time, 0, fstatus)
+  ftime <- ifelse(ftime >= max_time, max_time, ftime)
+  ftime[ftime==   max_time] <- ftime[ftime == max_time] + 
+    rnorm(length(max_time[max_time == 1]), mean = 0, sd = 1e-4)
   sim.data <- data.frame(fstatus = fstatus, ftime = ftime)
   X <- as.data.frame(X)
   colnames(X) <- paste0("X", seq_len(p))
@@ -294,15 +301,15 @@ ftime[ftime==   max_time] <- ftime[ftime == max_time] +
 ################## Prediction function for coxBoost ###########################
 predictRisk.iCoxBoost <- function(object, newdata, times, cause,...){
   p <- predict(object, newdata= newdata,type="CIF",times= newdata$ftime)
- # if (is.null(dim(p))) {
-#    if (length(p)!=length(times))
- #     stop("Prediction failed (wrong number of times)")
- # }
-#  else{
-#    if (NROW(p) != NROW(newdata) || NCOL(p) != length(times))
-#      stop(paste("\nPrediction matrix has wrong dimension:\nRequested newdata x times: ",NROW(newdata)," x ",length(times),"\nProvided prediction matrix: ",NROW(p)," x ",NCOL(p),"\n\n",sep=""))
-#  }
- p
+  # if (is.null(dim(p))) {
+  #    if (length(p)!=length(times))
+  #     stop("Prediction failed (wrong number of times)")
+  # }
+  #  else{
+  #    if (NROW(p) != NROW(newdata) || NCOL(p) != length(times))
+  #      stop(paste("\nPrediction matrix has wrong dimension:\nRequested newdata x times: ",NROW(newdata)," x ",length(times),"\nProvided prediction matrix: ",NROW(p)," x ",NCOL(p),"\n\n",sep=""))
+  #  }
+  p
 }
 ##################### Prediction function for casebase penalized model ################
 predict_CompRisk <- function(object, newdata = NULL) {
@@ -324,79 +331,91 @@ predict_CompRisk <- function(object, newdata = NULL) {
 
 ########################## Test train validation function for mtool.multinom ########
 mtool.multinom.holdout <- function(train, 
-                                   lambda_max = 0.02, grid_size = 100, epsilon = 0.001,
+                                   lambda_max = 0.09, grid_size = 100, epsilon = 0.001,
                                    train_ratio = 20, validation_ratio = 20, 
                                    test_ratio = 10, seed = 115, train_val_split = 0.80, 
                                    ncores = parallelly::availableCores(), alpha = 0.7, 
-                                   constant_covariates = 2) {
-  seed <- set.seed(seed)
-  train.index <- caret::createDataPartition(train$fstatus, p = train_val_split, list = FALSE)
-  train_new <- train[train.index,]
-  validation <- train[-train.index,]
-  surv_obj_train <- with(train_new, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-  cov_train <- as.matrix(cbind(train_new[, c(grepl("X", colnames(train)))], time = log(train_new$ftime)))
-  # Create case-base dataset
-  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio = 20)
-  # Create case base dataset for validation
-  surv_obj_validation <- with(validation, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-  cov_validation <- as.matrix(cbind(validation[, c(grepl("X", colnames(validation)))], time = log(validation$ftime)))
-  
-  # Create case-base dataset
-  cb_data_validation <- create_cbDataset(surv_obj_validation, cov_validation, ratio = 20)
-  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
-  # Set the number of cores to be used for parallel processing
-  num_cores <- ncores  # Adjust the number of cores as per your system's capacity
-  # Create a parallel cluster using the specified number of cores
-  cat("Setting up", num_cores, "cores for parallel run")
-  cl <- parallel::makeCluster(num_cores, setup_strategy = "sequential")
-  
-  # Load necessary packages on each cluster
-  clusterEvalQ(cl, {
-    library(casebase)
-    library(future.apply)
-    library(mtool)
-    library(parallel)
-    library(dplyr)
-  })
-  
-  .GlobalEnv$lambdagrid <- lambdagrid
-  .GlobalEnv$cb_data_train <- cb_data_train
-  # Export necessary objects to all clusters
-  objects_to_export <- c("fit_cbmodel", "multi_deviance", "cb_data_train", "lambdagrid")
-  clusterExport(cl, objects_to_export)
-  
-  cv_res <- foreach(lambda_val = lambdagrid, .packages = "mtool") %dopar% {
-    fit_cbmodel(cb_data_train, regularization = 'elastic-net', lambda = lambda_val, alpha = alpha)
-  }
-  
-  stopCluster(cl)
-  # Fit to validation test to choose lambda min
-  mult_deviance <- unlist(lapply(cv_res, multi_deviance, cb_data = cb_data_validation))
-  # Lambda min 
-  lambda.min <- lambdagrid[which.min(mult_deviance)]
-  non_zero_coefs <-  unlist(lapply(cv_res, function(x) {return(x$no_non_zero)}))
-  sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
-  if (sel_lambda_min  == 2*constant_covariates) {
-    cat("Null model chosen: choosing first non-null model lambda")
-    lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
-  }
- return(lambda.min)
+                                   constant_covariates = 2, reps = 5) {
+  Results <- replicate(reps, {
+    seed <- set.seed(seed)
+    train.index <- caret::createDataPartition(train$fstatus, p = train_val_split, list = FALSE)
+    train_new <- train[train.index,]
+    validation <- train[-train.index,]
+    surv_obj_train <- with(train_new, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+    cov_train <- as.matrix(cbind(train_new[, c(grepl("X", colnames(train)))], time = log(train_new$ftime)))
+    # Create case-base dataset
+    cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio = 20)
+    # Scale dataset
+    cb_data_train$covariates <- as.data.frame(scale(cb_data_train$covariates, center = T, scale = T))
+    # Create case base dataset for validation
+    surv_obj_validation <- with(validation, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+    cov_validation <- as.matrix(cbind(validation[, c(grepl("X", colnames(validation)))], time = log(validation$ftime)))
+    # Create case-base dataset
+    cb_data_validation <- create_cbDataset(surv_obj_validation, cov_validation, ratio = 20)
+    # Scale dataset
+    cb_data_validation$covariates <- as.data.frame(scale(cb_data_validation$covariates, center = T, scale = T))
+    lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+    # Set the number of cores to be used for parallel processing
+    num_cores <- ncores  # Adjust the number of cores as per your system's capacity
+    # Create a parallel cluster using the specified number of cores
+    cat("Setting up", num_cores, "cores for parallel run")
+    cl <- parallel::makeCluster(num_cores, setup_strategy = "sequential")
+    
+    # Load necessary packages on each cluster
+    clusterEvalQ(cl, {
+      library(casebase)
+      library(future.apply)
+      library(mtool)
+      library(parallel)
+      library(dplyr)
+    })
+    
+    .GlobalEnv$lambdagrid <- lambdagrid
+    .GlobalEnv$cb_data_train <- cb_data_train
+    # Export necessary objects to all clusters
+    objects_to_export <- c("fit_cbmodel", "multi_deviance", "cb_data_train", "lambdagrid")
+    clusterExport(cl, objects_to_export)
+    
+    cv_res <- foreach(lambda_val = lambdagrid, .packages = "mtool") %dopar% {
+      fit_cbmodel(cb_data_train, regularization = 'elastic-net', lambda = lambda_val, alpha = alpha)
+    }
+    rm(cb_data_train)
+    gc()
+    stopCluster(cl)
+    # Fit to validation test to choose lambda min
+    mult_deviance <- unlist(lapply(cv_res, multi_deviance, cb_data = cb_data_validation))
+    # Lambda min 
+    lambda.min <- lambdagrid[which.min(mult_deviance)]
+    non_zero_coefs <-  unlist(lapply(cv_res, function(x) {return(x$no_non_zero)}))
+    sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
+    if (sel_lambda_min  == 2*constant_covariates) {
+      cat("Null model chosen: choosing first non-null model lambda")
+      lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
+    }
+    # Remove objects and perform garbage collection
+    rm(cb_data_validation, surv_obj_validation, cov_validation, cv_res, mult_deviance, non_zero_coefs)
+    gc()
+    lambda.min 
+  }, simplify = FALSE)
+  Results <- do.call(rbind, Results)
+  lambda.min <-  mean(Results)
+  return(lambda.min)
 }
 
 
 ################## Brier score prediction function for casebase #######################
-predictEventProb.CompRisk <- function(object, newdata, times, cause, ...) {
+predictRisk.CompRisk<- function(object, newdata, times, cause, ...) {
   #get all covariates excluding intercept and time
   coVars=colnames(object@originalData[, c(grepl("X", colnames(object@originalData)))])
   #coVars is used in lines 44 and 50
   newdata=data.matrix(drop(subset(newdata, select=coVars)))
   
-  # if (missing(cause)) stop("Argument cause should be the event type for which we predict the absolute risk.")
+  if (missing(cause)) stop("Argument cause should be the event type for which we predict the absolute risk.")
   # the output of absoluteRisk is an array with dimension depending on the length of the requested times:
   # case 1: the number of time points is 1
   #         dim(array) =  (length(time), NROW(newdata), number of causes in the data)
   if (length(times) == 1) {
-    a <- casebase::absoluteRisk.CompRisk(object, newdata = newdata, time = times)
+    a <- absoluteRisk.CompRisk(object, newdata = newdata, time = times, addZero = FALSE)
     p <- matrix(a, ncol = 1)
   } else {
     # case 2 a) zero is included in the number of time points
@@ -424,34 +443,82 @@ predictEventProb.CompRisk <- function(object, newdata, times, cause, ...) {
   p
 }
 
+####################################################################################
+predictRisk.penalizedCompRisk <- function(object, newdata, times, cause, ...) {
+  #get all covariates excluding intercept and time
+  #newdata = newdata[, .SD, .SDcols = grep("X", colnames(newdata), value = TRUE)]
+  if (missing(cause)) stop("Argument cause should be the event type for which we predict the absolute risk.")
+  # the output of absoluteRisk is an array with dimension depending on the length of the requested times:
+  # case 1: the number of time points is 1
+  #         dim(array) =  (length(time), NROW(newdata), number of causes in the data)
+  if (length(times) == 1) {
+    a <- absoluteRisk.penalized(object, newdata = newdata, time = times, addZero = FALSE)
+    p <- matrix(a, ncol = 1)
+  } else {
+    # case 2 a) zero is included in the number of time points
+    if (0 %in% times) {
+      # dim(array) =  (length(time)+1, NROW(newdata)+1, number of causes in the data)
+      a <- absoluteRisk.penalized(object, newdata = newdata, time = times)
+      p <- t(a)
+    } else {
+      # case 2 b) zero is not included in the number of time points (but the absoluteRisk function adds it)
+      a <- absoluteRisk.penalized(object, newdata = newdata, time = times)
+      ### we need to invert the plot because, by default, we get cumulative incidence
+      #a[, -c(1)] <- 1 - a[, -c(1)]
+      ### we remove time 0 for everyone, and remove the time column
+      a <- a[-c(1), -c(1)] ### a[-c(1), ] to keep times column, but remove time 0 probabilities
+      # now we transpose the matrix because in riskRegression we work with number of
+      # observations in rows and time points in columns
+      p <- t(a)
+    }
+  }
+  if (NROW(p) != NROW(newdata) || NCOL(p) != length(times)) {
+    stop(paste("\nPrediction matrix has wrong dimensions:\nRequested newdata x times: ", 
+               NROW(newdata), " x ", length(times), "\nProvided prediction matrix: ", 
+               NROW(p), " x ", NCOL(p), "\n\n", sep = ""))
+  }
+  p
+}
 ########### Function to compute weibull hazard #######################################
 weibull_hazard <- Vectorize(function(gamma, lambda, t) {
   return(gamma * lambda * t^(gamma - 1))
 })
 
 ############ Function to simulate from cause-specific hazards ############################
-cause_hazards_sim <- function(p, n, beta1, beta2, hazard1 = 0.15, hazard2 = 0.10, 
+cause_hazards_sim <- function(p, n, beta1, beta2, 
                               nblocks = 4, cor_vals = c(0.7, 0.4, 0.6, 0.5), num.true = 20, h1 = 0.55, h2 = 0.10, 
                               gamma1 = 100, gamma2 = 100, max_time = 1.5, noise_cor = 0.1, 
-                              rate_cens = 0.05, min_time = 0.002) {
+                              rate_cens = 0.05, min_time = 0.002, exchangeable = FALSE) {
   # Warnings
   if(length(beta1) != length(beta2)) stop("Dimension of beta1 and beta2 should be the same")
-  # Set the number of variables per block
-  vpb <- num.true/nblocks
   if(nblocks != length(cor_vals)) stop("Dimension of nblocks and correlations for blocks should match")
-  # Set the correlation values for each covariate block
-  correlation_values <- cor_vals
-  # Initialize empty matrix
-  correlation_matrix <- matrix(noise_cor, nrow = p, ncol = p)
-  # Generate the covariance matrix with block correlations
-  for (i in 1:nblocks) {
-    start_index <- (i - 1) * vpb + 1
-    end_index <- i * vpb
-    correlation_matrix[start_index:end_index, start_index:end_index] <- correlation_values[i]
+  if(isTRUE(exchangeable)) {
+    # Create an empty matrix
+    mat <- matrix(noise_cor, nrow = p, ncol = p)
+    # Set the correlation values
+    cor_exchangeable <- 0.5
+    # Set the upper triangular and lower triangular parts
+    mat[1:num.true, 1:num.true] <- cor_exchangeable
+    # Print the matrix
+    diag(mat) <- rep(1, length(diag(mat)))
+    X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = mat)
+  } else {
+    # Set the number of variables per block
+    vpb <- num.true/nblocks
+    # Set the correlation values for each covariate block
+    correlation_values <- cor_vals
+    # Initialize empty matrix
+    correlation_matrix <- matrix(noise_cor, nrow = p, ncol = p)
+    # Generate the covariance matrix with block correlations
+    for (i in 1:nblocks) {
+      start_index <- (i - 1) * vpb + 1
+      end_index <- i * vpb
+      correlation_matrix[start_index:end_index, start_index:end_index] <- correlation_values[i]
+    }
+    # Diagonal elements should be 1
+    diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
+    X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = correlation_matrix)
   }
-  # Diagonal elements should be 1
-  diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
-  X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = correlation_matrix)
   X <- as.matrix(X)
   # Specify rate parameters
   lambda1 <- h1 * exp(X %*% beta1)
@@ -490,17 +557,17 @@ cause_hazards_sim <- function(p, n, beta1, beta2, hazard1 = 0.15, hazard2 = 0.10
   cens <- stats::rexp(n = n, rate = rate_cens)
   c.ind <- ifelse(cens < times, 0, c.ind)
   times <- pmin(cens, times)
- # Winsorize time ranges to desired ones to make them more realistic and add some white noise 
-   c.ind <- ifelse(times >= max_time, 0, c.ind)
-   times <- ifelse(times >= max_time, max_time, times)
-   times[times == max_time] <- times[times == max_time] + rnorm(length(times[times == max_time]), mean = 0, sd = 1e-4)
-   times <- ifelse(times < min_time, min_time, times)
-   times[times == min_time] <- times[times == min_time] + abs(rnorm(length(times[times == min_time]), mean = 0, sd = 1e-4))
-   sim.data <- data.frame(fstatus = c.ind, ftime = times)
-   X <- as.data.frame(X)
-   colnames(X) <- paste0("X", seq_len(p))
-   sim.data <- as.data.frame(cbind(sim.data, X))
-   return(sim.data)
+  # Winsorize time ranges to desired ones to make them more realistic and add some white noise 
+  c.ind <- ifelse(times >= max_time, 0, c.ind)
+  times <- ifelse(times >= max_time, max_time, times)
+  times[times == max_time] <- times[times == max_time] + rnorm(length(times[times == max_time]), mean = 0, sd = 1e-4)
+  times <- ifelse(times < min_time, min_time, times)
+  times[times == min_time] <- times[times == min_time] + abs(rnorm(length(times[times == min_time]), mean = 0, sd = 1e-4))
+  sim.data <- data.frame(fstatus = c.ind, ftime = times)
+  X <- as.data.frame(X)
+  colnames(X) <- paste0("X", seq_len(p))
+  sim.data <- as.data.frame(cbind(sim.data, X))
+  return(sim.data)
 }
 
 
@@ -637,6 +704,7 @@ predictEventProb.two.selpen.CSlassos = function (object, newdata, times, cause, 
 cv.glmnet.CR = function (data, causeOfInt, nfolds = 10,alpha=1, standardize=FALSE, 
                          t.BS = NULL, nlambda = 20, seed = 1, draw.heatmap = FALSE, ...) {
   set.seed(seed)
+  data <- train
   data = data.frame(data)
   vars = colnames(data)[(!colnames(data) %in% c('ftime', 'fstatus'))]
   x = as.matrix(data[, vars])
@@ -660,57 +728,57 @@ cv.glmnet.CR = function (data, causeOfInt, nfolds = 10,alpha=1, standardize=FALS
     
     outlist[[i]] =twoCSlassos(data = data_sub, lambdavec = lambdavec, ...)
   }
-
-# helper function to make prediction vector for all patients at fixed 
-# index(lambda1, lambda2)
-makepred = function(outlist, nfolds, foldid, index){
-  p = vector('list', nfolds)
-  # make prediction on each fold
-  for (i in seq(nfolds)) {
-    which = foldid == i
-    fitobj = outlist[[i]]
-    test =  data[which,]
-    
-    p[[i]] = predictEventProb.twoCSlassos(fitobj, newdata=test, times = t.BS, 
-                                          cause = causeOfInt,lambdavecs= lambdavec,
-                                          indices = index) %>% as.numeric 
-    names(p[[i]]) = ID[which]
-  }    
-  #reorder predictions to fit with original data
-  p = unlist(p) 
-  p = p[order(as.numeric(names(p)))]  %>% matrix
-  return(p)
-}
-
-index = expand.grid('ind.lambda1'=1:length(lambdavec[[1]]), 
-                    'ind.lambda2'=1:length(lambdavec[[2]]))
-index = as.list(data.frame(t(index)))
-
-# make list of prediction over list of all indices(lambda1, lambda2)
-listofpred = lapply(index, function(i) makepred(outlist, nfolds, foldid, ind =i))
-
-
-# Brier score for all combinations of lambdas
-temp = pec(listofpred, formula=Hist(ftime,fstatus)~1, data=data, cause = causeOfInt,
-           times=t.BS, start=NULL,exact=FALSE, cens.model = 'marginal')
-BS = array(data = unlist(temp$AppErr[-1]),
-           dim = c(length(lambdavec[[1]]), length(lambdavec[[2]])),
-           dimnames = list(paste('l1=', round(lambdavec[[1]],5)),
-                           paste('l2=', round(lambdavec[[2]],5))))
-
-if(draw.heatmap) pheatmap(BS, cluster_rows = FALSE, cluster_cols = FALSE, display_numbers = TRUE)
-# pheatmap(R2, cluster_rows = FALSE, cluster_cols = FALSE, display_numbers = TRUE)
-
-glmnet.fits = twoCSlassos(data = data, lambdavec = lambdavec, ...)
-min.index = which(BS == min(BS), arr.ind = TRUE) %>% as.numeric
-
-best.fit = two.selpen.CSlassos(glmnet.fits, ind = min.index)
-out <- list('glmnet.fits' = glmnet.fits, 'min.index'=min.index, 'best.fit'=best.fit,
-            'BS' = BS, 'lambdavec' = lambdavec)
-
-out$call <- match.call()
-class(out) <- "cv.glmnet.CR"
-out
+  
+  # helper function to make prediction vector for all patients at fixed 
+  # index(lambda1, lambda2)
+  makepred = function(outlist, nfolds, foldid, index){
+    p = vector('list', nfolds)
+    # make prediction on each fold
+    for (i in seq(nfolds)) {
+      which = foldid == i
+      fitobj = outlist[[i]]
+      test =  data[which,]
+      
+      p[[i]] = predictEventProb.twoCSlassos(fitobj, newdata= test, times = t.BS, 
+                                            cause = causeOfInt,lambdavecs= lambdavec,
+                                            indices = index) %>% as.numeric 
+      names(p[[i]]) = ID[which]
+    }    
+    #reorder predictions to fit with original data
+    p = unlist(p) 
+    p = p[order(as.numeric(names(p)))]  %>% matrix
+    return(p)
+  }
+  
+  index = expand.grid('ind.lambda1'=1:length(lambdavec[[1]]), 
+                      'ind.lambda2'=1:length(lambdavec[[2]]))
+  index = as.list(data.frame(t(index)))
+  
+  # make list of prediction over list of all indices(lambda1, lambda2)
+  listofpred = lapply(index, function(i) makepred(outlist, nfolds, foldid, ind =i))
+  
+  
+  # Brier score for all combinations of lambdas
+  temp = pec(listofpred, formula=Hist(ftime,fstatus)~1, data=data, cause = causeOfInt,
+             times=t.BS, start=NULL,exact=FALSE, cens.model = 'marginal')
+  BS = array(data = unlist(temp$AppErr[-1]),
+             dim = c(length(lambdavec[[1]]), length(lambdavec[[2]])),
+             dimnames = list(paste('l1=', round(lambdavec[[1]],5)),
+                             paste('l2=', round(lambdavec[[2]],5))))
+  
+  if(draw.heatmap) pheatmap(BS, cluster_rows = FALSE, cluster_cols = FALSE, display_numbers = TRUE)
+  # pheatmap(R2, cluster_rows = FALSE, cluster_cols = FALSE, display_numbers = TRUE)
+  
+  glmnet.fits = twoCSlassos(data = test, lambdavec = lambdavec, ...)
+  min.index = which(BS == min(BS), arr.ind = TRUE) %>% as.numeric
+  
+  best.fit = two.selpen.CSlassos(glmnet.fits, ind = min.index)
+  out <- list('glmnet.fits' = glmnet.fits, 'min.index'=min.index, 'best.fit'=best.fit,
+              'BS' = BS, 'lambdavec' = lambdavec)
+  
+  out$call <- match.call()
+  class(out) <- "cv.glmnet.CR"
+  out
 }
 
 
@@ -783,28 +851,40 @@ my.balanced.folds <- function(class.column.factor, cross.outer){
 # cens.param = parameteres used in uniform censoring distribution
 
 cause_SDH_sim <- function(n, p, beta1, beta2, q = 0.5,  nblocks = 4, 
-  cor_vals = c(0.7, 0.4, 0.6, 0.5), num.true = 20, max_time = 1.5, 
-  noise_cor = 0.1, u.min = 0, u.max = 1, min_time = 0.002) {
+                          cor_vals = c(0.7, 0.4, 0.6, 0.5), num.true = 20, max_time = 1.5, 
+                          noise_cor = 0.1, u.min = 0, u.max = 1, min_time = 0.002, 
+                          exchangeable = FALSE) {
   #call all variables that have effect on CIF 1 (i.e. first column of gamma !=0) 'related'. 
-   ## Binomial experiment to decide which event happens
+  ## Binomial experiment to decide which event happens
   # Warnings
   if(length(beta1) != length(beta2)) stop("Dimension of beta1 and beta2 should be the same")
-  # Set the number of variables per block
-  vpb <- num.true/nblocks
-  if(nblocks != length(cor_vals)) stop("Dimension of nblocks and correlations for blocks should match")
-  # Set the correlation values for each covariate block
-  correlation_values <- cor_vals
-  # Initialize empty matrix
-  correlation_matrix <- matrix(noise_cor, nrow = p, ncol = p)
-  # Generate the covariance matrix with block correlations
-  for (i in 1:nblocks) {
-    start_index <- (i - 1) * vpb + 1
-    end_index <- i * vpb
-    correlation_matrix[start_index:end_index, start_index:end_index] <- correlation_values[i]
+  if(isTRUE(exchangeable)) {
+    # Create an empty matrix
+    mat <- matrix(noise_cor, nrow = p, ncol = p)
+    # Set the correlation values
+    cor_exchangeable <- 0.5
+    # Set the upper triangular and lower triangular parts
+    mat[1:num.true, 1:num.true] <- cor_exchangeable
+    # Print the matrix
+    diag(mat) <- rep(1, length(diag(mat)))
+    X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = mat)
+  } else {
+    # Set the number of variables per block
+    vpb <- num.true/nblocks
+    # Set the correlation values for each covariate block
+    correlation_values <- cor_vals
+    # Initialize empty matrix
+    correlation_matrix <- matrix(noise_cor, nrow = p, ncol = p)
+    # Generate the covariance matrix with block correlations
+    for (i in 1:nblocks) {
+      start_index <- (i - 1) * vpb + 1
+      end_index <- i * vpb
+      correlation_matrix[start_index:end_index, start_index:end_index] <- correlation_values[i]
+    }
+    # Diagonal elements should be 1
+    diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
+    X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = correlation_matrix)
   }
-  # Diagonal elements should be 1
-  diag(correlation_matrix) <- rep(1, length(diag(correlation_matrix)))
-  X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = correlation_matrix)
   X <- as.matrix(X)
   prob.event1 <- 1 - (1 - q)^exp(X %*% beta1)
   event <- rbinom(n, 1, prob.event1)
@@ -828,26 +908,217 @@ cause_SDH_sim <- function(n, p, beta1, beta2, q = 0.5,  nblocks = 4,
   Us <- runif(n)
   for (i in seq_len(n)) {
     time[i] <- switch(as.character(event[i]),
-                           "1" = {
-                             uniroot(cdf1, c(0, 1000000), tol = 0.0001,
-                                     u = Us[i], incr = i)$root
-                           },
-                           "2" = {
-                             uniroot(cdf2, c(0, 1000000), tol = 0.0001,
-                                     u = Us[i], incr = i)$root
-                           })
+                      "1" = {
+                        uniroot(cdf1, c(0, 1000000), tol = 0.0001,
+                                u = Us[i], incr = i)$root
+                      },
+                      "2" = {
+                        uniroot(cdf2, c(0, 1000000), tol = 0.0001,
+                                u = Us[i], incr = i)$root
+                      })
   }
   
   time[time<=0] = runif(sum(time==0),min_time, max_time)
   # Constrain time to 1.5 years 
   time <- ifelse(time >= max_time, max_time, time)
   time[time == max_time] <- time[time == max_time] + rnorm(length(time[time == max_time]), mean = 0, sd = 1e-4)
-    cens <- runif(n, u.min, u.max)
-    time <- pmin(cens, time)
-    status <- ifelse(time == cens, 0, event)
-    X <- as.data.frame(X)
-    colnames(X) <- paste0("X", seq_len(p))
-    sim.data = data.frame(ftime = time, fstatus = status, X)
+  cens <- runif(n, u.min, u.max)
+  time <- pmin(cens, time)
+  status <- ifelse(time == cens, 0, event)
+  X <- as.data.frame(X)
+  colnames(X) <- paste0("X", seq_len(p))
+  sim.data = data.frame(ftime = time, fstatus = status, X)
   return(sim.data)
 }
 
+############### MSE (bias of coefficients for all in model estimated to be non-zero) ######################
+mse_bias <- function(coef, true_coefs) {
+  indices <- which(coef != 0)
+  mse <- mean((coef[indices] - true_coefs[indices])^2)
+  return(mse)
+}
+
+################### Post-LASSO function #################################
+############ Sketch of function for post-LASSO (or post elastic net in this case) #########
+# Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
+multinom.post_enet <- function(fit_object, cause = 1) {
+  # Obtain all non-zero selected covariates from cause 1 
+  coef <- fit_val_min$coefficients[1:eval(parse(text="p")), 1]
+  non_zero_coefs_cause1 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 1] != 0)
+  non_zero_coefs <- paste("X", non_zero_coefs_cause1, sep = "")
+  # Create new subsetted dataset 
+  testnew <- cbind(test[, c(colnames(test) %in% non_zero_coefs)], ftime = (test$ftime), fstatus = test$fstatus)
+  # Fit "OLS" (unparameterized multinomial model)
+  model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -ftime -fstatus,
+                              data = testnew,
+                              ratio = 100, time = "ftime")
+  coeffs <- matrix(coef(model_cb), nrow =  length(coef(model_cb))/2, byrow = TRUE)
+  rownames(coeffs) <- c(colnames(testnew)[-length(colnames(testnew))], "Intercept")
+  coef[non_zero_coefs_cause1] <- coeffs[1:length( non_zero_coefs_cause1)]
+  return(list(coef_selected = coeffs, non_zero_coefs = non_zero_coefs_cause1, coefs_all = coef))
+}
+
+
+############################## Multinom CV function for compute canada #################
+mtool.multinom.cv_cluster <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+                                      constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE,  ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
+  surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+  cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
+  # Create case-base dataset
+  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
+  # Default lambda grid
+  if(is.null(lambda_max)) {
+    # Lambda max grid for bisection search 
+    if(is.null(initial_max_grid)) {
+      initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
+      # Set the number of cores to be used for parallel processing
+      num_cores <- ncores  # Adjust the number of cores as per your system's capacity
+      # Create a parallel cluster using the specified number of cores
+      cat("Setting up", num_cores, "cores for parallel run")
+      cl <- parallel::makeCluster(num_cores, setup_strategy = "sequential")
+      
+      # Load necessary packages on each cluster
+      clusterEvalQ(cl, {
+        library(casebase)
+        library(future.apply)
+        library(mtool)
+        library(parallel)
+        library(dplyr)
+      })
+      .GlobalEnv$initial_max_grid <- initial_max_grid
+      .GlobalEnv$cb_data_train <- cb_data_train
+      objects_to_export <- c("fit_cbmodel", "multi_deviance", "cb_data_train", "initial_max_grid",  "alpha")
+      clusterExport(cl, objects_to_export)
+      
+      fit_val_max  <- foreach(lambda_val = initial_max_grid, .packages = "mtool") %dopar% {
+        fit_cbmodel(cb_data_train, regularization = 'elastic-net', lambda = lambda_val, alpha = alpha, 
+                    unpen_cov = constant_covariates)
+      }
+      stopCluster(cl)
+      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
+      
+      if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
+        warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
+      }
+      upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
+      lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
+      new_max_searchgrid <- seq(lower, upper, precision)
+      
+      rm(fit_val_max, non_zero_coefs)
+      
+      # Set the number of cores to be used for parallel processing
+      num_cores <- ncores  # Adjust the number of cores as per your system's capacity
+      # Create a parallel cluster using the specified number of cores
+      cat("Setting up", num_cores, "cores for parallel run")
+      cl <- parallel::makeCluster(num_cores, setup_strategy = "sequential")
+      
+      # Load necessary packages on each cluster
+      clusterEvalQ(cl, {
+        library(casebase)
+        library(future.apply)
+        library(mtool)
+        library(parallel)
+        library(dplyr)
+      })
+      
+      .GlobalEnv$new_max_searchgrid <- new_max_searchgrid
+      .GlobalEnv$cb_data_train <- cb_data_train
+      # Export necessary objects to all clusters
+      
+      objects_to_export <- c("fit_cbmodel", "multi_deviance", "cb_data_train", "new_max_searchgrid", "alpha")
+      
+      clusterExport(cl, objects_to_export)
+      
+      fit_val_max <- foreach(lambda_val = new_max_searchgrid, .packages = "mtool") %dopar% {
+        fit_cbmodel(cb_data_train, regularization = 'elastic-net', lambda = lambda_val, alpha = alpha)
+      }
+      
+      stopCluster(cl)
+      
+      non_zero_coefs <-  unlist(lapply( fit_val_max, function(x) {return(x$no_non_zero)}))
+      lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
+      
+      rm(fit_val_max, new_max_searchgrid)
+    }
+  }
+  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  cb_data_train <- as.data.frame(cb_data_train)
+  # Remove the "time" column 
+  cb_data_train <- cb_data_train %>%
+    select(-time)
+  # Create folds 
+  folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
+  lambda.min <- rep(NA_real_, nfold)
+  all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  non_zero_coefs <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  #Perform 10 fold cross validation
+  for(i in 1:nfold){
+    #Segment your data by fold using the which() function 
+    train_cv <- cb_data_train[which(folds != i), ] #Set the training set
+    test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
+    # Create X and Y
+    train_cv <- list("time" = train_cv$time,
+                     "event_ind" = train_cv$event_ind,
+                     "covariates" = train_cv[, grepl("covariates", names(train_cv))],
+                     "offset" = train_cv$offset)
+    rm(cb_data_train)
+    # Standardize
+    train_cv$covariates <- as.data.frame(scale(train_cv$covariates, center = T, scale = T))
+    # Set the number of cores to be used for parallel processing
+    num_cores <- ncores  # Adjust the number of cores as per your system's capacity
+    # Create a parallel cluster using the specified number of cores
+    cat("Setting up", num_cores, "cores for parallel run")
+    cl <- parallel::makeCluster(num_cores, setup_strategy = "sequential")
+    
+    # Load necessary packages on each cluster
+    clusterEvalQ(cl, {
+      library(casebase)
+      library(future.apply)
+      library(mtool)
+      library(parallel)
+      library(dplyr)
+    })
+    .GlobalEnv$lambdagrid <- lambdagrid
+    .GlobalEnv$cb_data_train <- cb_data_train
+    # Export necessary objects to all clusters
+    objects_to_export <- c("fit_cbmodel", "multi_deviance", "cb_data_train", "lambdagrid")
+    clusterExport(cl, objects_to_export)
+    cat("Fitting Fold", i, "\n")
+    cvs_res <- parLapply(cl, lambdagrid, 
+                         function(lambda_val) {
+                           fit_cbmodel(train_cv, regularization = 'elastic-net',
+                                       lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
+                         })
+    cat("Completed CV")
+    test_cv <- list("time" = test_cv$covariates.time,
+                    "event_ind" = test_cv$event_ind,
+                    "covariates" = as.matrix(test_cv[, grepl("covariates", names(test_cv))]),
+                    "offset" = test_cv$offset)
+    # Standardize
+    test_cv$covariates <- as.data.frame(scale(test_cv$covariates, center = T, scale = T))
+    mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
+    all_deviances[, i] <- mult_deviance
+    non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
+    cat("Completed Fold", i, "\n")
+  }
+  mean_dev <- rowMeans(all_deviances)
+  lambda.min <- lambdagrid[which.min(mean_dev)]
+  sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
+  if (sel_lambda_min  == 2*constant_covariates) {
+    cat("Null model chosen: choosing first non-null model lambda")
+    lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
+  }
+  cv_se <- sqrt(var(mean_dev))
+  dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
+  dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
+  range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
+  lambda.1se <- max(range.1se)
+  lambda.min1se <- min(range.1se)
+  range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
+  lambda.0.5se <- max(range.0.5se)
+  lambda.min0.5se <- min(range.0.5se)
+  rownames(all_deviances) <- lambdagrid
+  rownames(non_zero_coefs) <- lambdagrid
+  return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
+              lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances))
+}
