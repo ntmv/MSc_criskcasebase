@@ -135,6 +135,7 @@ myRelaxedGlmnetFolds = function(train_data, response, folds = 5, print_time) {
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
                 min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
+  set.seed(NULL)
   return (result)
 }
 
@@ -286,6 +287,7 @@ myRelaxedCustomFolds = function(train_data, response, cv, folds = 5, print_time)
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
                 min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
+  set.seed(NULL)
   return (result)
 }
 
@@ -357,8 +359,8 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
         non_zero_coef = current_coef[current_coef != 0]
         all_zeros = length(non_zero_coef) == 0
         if(m == 1) {
-          print(paste("current lambda index: ", as.character(i)))
-          print(current_coef)
+          # print(paste("current lambda index: ", as.character(i)))
+          # print(current_coef)
         }
 
         
@@ -438,6 +440,7 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = all_lambdas, 
                 min_lambda = all_lambdas[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
+  set.seed(NULL)
   return (result)
 }
 
@@ -586,6 +589,7 @@ myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
                 min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
+  set.seed(NULL)
   return (result)
 }
 

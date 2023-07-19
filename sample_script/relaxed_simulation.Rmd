@@ -36,11 +36,6 @@ source("../src/helper_functions.R")
 
 # Check final implementation
 ``` {r test-relaxed-lasso-final}
-library(pracma)
-# seed = randi(100000)
-# print(seed)
-# set.seed(seed)
-
 p = 20
 n = 400
 
