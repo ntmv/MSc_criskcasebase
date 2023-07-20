@@ -321,6 +321,7 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
     current_MSE = .Machine$double.xmax;
     best_fit = lm(1~1)
     best_lambda_index = 0
+    mse_matrix = matrix(NA_real_, nrow = length(all_lambdas), ncol = folds)
     
     # Iterate over all lambdas
     indices = c(1:length(all_lambdas))
@@ -338,7 +339,9 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
       folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
       res = list()
       mse_values = c()
+
       for(m in 1:folds) {
+        # print(paste("Current lambda and fold indices: ", as.character(i), ", ", as.character(m)))
         train_indices <- folds_list[[m]]
         if (is.matrix(train_data)) {
           k_minus_1_train_data = train_data[train_indices, ]
@@ -358,16 +361,12 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
         current_coef = coef(fit_en)[-1, ]
         non_zero_coef = current_coef[current_coef != 0]
         all_zeros = length(non_zero_coef) == 0
-        if(m == 1) {
-          # print(paste("current lambda index: ", as.character(i)))
-          # print(current_coef)
-        }
-
         
         # If no predictors selected, skip OLS with cross validation and continue with next lambda
         if (all_zeros){
           coefs_all_lambdas[rows,] = 0
           mse_values[m] = mean((y_valid)^2)
+          mse_matrix[i, m] = mse_values[m]
           next
         }
 
@@ -398,10 +397,9 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
         fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
         pred = predict(fit_OLS_on_LASSO_subset, newdata = validation_fold_data)
         mse_values[m] = mean((y_valid - pred)^2)
+        mse_matrix[i, m] = mse_values[m]
       }
-      
-      print(mse_values)
-      
+
       MSE = mean(mse_values)
 
       # Format new row of coefficient table for current lambda
@@ -437,13 +435,26 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
   if(print_time)
     toc()
   
-  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = all_lambdas, 
+  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_folds_MSEs = mse_matrix, all_lambdas = all_lambdas, 
                 min_lambda = all_lambdas[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
   set.seed(NULL)
   return (result)
 }
 
+formatNewRow = function(current_coefficients, new_row) {
+  coefs_all_lambdas[rows+1,] = 0
+  j = 1
+  
+  for (l in c(1:length(coefs_all_lambdas))) {
+    if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
+      break
+    if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
+      coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
+      j = j + 1
+    }
+  } 
+}
 
 
 #' Fits linear regression using relaxed LASSO regularization to given data
@@ -597,17 +608,7 @@ myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
 
 
 generateDataset = function(p, n) {
-  beta = c()
-  for (i in seq(1:(p+1))) {
-    if (i == 1) {
-      beta = c(beta, 1)
-    }
-    else if (i %% 2 == 0) {
-      beta = c(beta, 0)
-    } else {
-      beta = c(beta, 0.5)
-    }
-  }
+  beta = c(rep(1, 11), rep(0, 10))
   beta = as.matrix(beta)
   beta_neg = -beta
   
@@ -646,29 +647,6 @@ partitionData = function(x, y) {
   return(result)
 }
 
-
-formatCoefficientTableRow = function(non_zero_coefficients, column_names) {
-  non_zero_coefficient_names = names(non_zero_coefficients)
-  result = c()
-  i = 1
-  
-  if(non_zero_coefficient_names[i] == "(Intercept)") {
-    i = i + 1
-  }
-  
-  for (l in c(1:length(column_names))) {
-    if(column_names[l] == "(Intercept)") {
-      next
-    }
-    if (column_names[l] %in% non_zero_coefficient_names[i]) {
-      result = c(result, as.numeric(non_zero_coefficients[i]))
-      i = i + 1
-    } else {
-      result = c(result, 0)
-    }
-  }
-  return(result)
-}
 
 
 fitAll = function(train_data, response, folds = 5, print_time) {
@@ -820,27 +798,32 @@ runSim = function(p, n, N, print_time) {
 }
 
 
-
-round_df = function(x, digits) {
-  # round all numeric variables
-  # x: data frame 
-  # digits: number of digits to round
-  numeric_columns <- sapply(x, mode) == 'numeric'
-  x[numeric_columns] <-  round(x[numeric_columns], digits)
-  x
+formatCoefficientTableRow = function(non_zero_coefficients, column_names) {
+  non_zero_coefficient_names = names(non_zero_coefficients)
+  result = c()
+  i = 1
+  
+  if(non_zero_coefficient_names[i] == "(Intercept)") {
+    i = i + 1
+  }
+  
+  for (l in c(1:length(column_names))) {
+    if(column_names[l] == "(Intercept)") {
+      next
+    }
+    if (column_names[l] %in% non_zero_coefficient_names[i]) {
+      result = c(result, as.numeric(non_zero_coefficients[i]))
+      i = i + 1
+    } else {
+      result = c(result, 0)
+    }
+  }
+  return(result)
 }
 
 
 formatCoefficientBiasTable = function(sim_results) {
-  betas = c()
-  p = 20
-  for (i in seq(1:p)) {
-    if (i %% 2 != 0) {
-      betas = c(betas, 0)
-    } else {
-      betas = c(betas, 0.5)
-    }
-  }
+  betas = c(rep(1, 10), rep(0, 10))
   
   model_fit_labels = c("cv.glmnet relax = TRUE, lambda min",
                        "Relaxed LASSO implementation, glmnet(), start CV AFTER predictors selected", 
@@ -889,4 +872,34 @@ formatAverageTestMSETable = function(sim_results) {
   
   return(average_MSE_table)
 }
+
+
+
+
+round_df = function(x, digits) {
+  # round all numeric variables
+  # x: data frame 
+  # digits: number of digits to round
+  numeric_columns <- sapply(x, mode) == 'numeric'
+  x[numeric_columns] <-  round(x[numeric_columns], digits)
+  x
+}
+
+
+
+#' ###########################################################
+#' Plotting function for relaxed LASSO (MSEs calculated on each fold using unparameterized fit from each set of selected predictors for each lambda)
+plot_myRelaxed = function(relaxed_object) {
+  nfold <- ncol(relaxed_object$all_folds_MSEs)
+  mean_MSE <- rowMeans(relaxed_object$all_folds_MSEs)
+  row_stdev <- apply(relaxed_object$all_folds_MSEs, 1, function(x) {sd(x)/sqrt(nfold)})
+  plot.dat <- data.frame(lambdagrid = relaxed_object$all_lambdas, mean.MSE = mean_MSE, 
+                         upper = mean_MSE +row_stdev, lower = mean_MSE - row_stdev)
+  p <- ggplot(plot.dat, aes(log(lambdagrid), mean.MSE)) + geom_point(colour = "red", size = 3) + theme_bw() + 
+    geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, position=position_dodge(0.05), colour = "grey") + 
+    labs(x = "log(lambda)", y = "Mean-Squared Error")  + 
+    geom_vline(xintercept = log(relaxed_object$min_lambda), linetype = "dotted", colour = "blue")  
+  return(p)
+}
+
 

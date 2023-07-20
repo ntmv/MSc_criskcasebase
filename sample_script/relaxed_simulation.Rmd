@@ -43,13 +43,14 @@ dataset = generateDataset(p, n)
 partitioned_data = partitionData(dataset$X, dataset$Y)
 training_data = partitioned_data[c("x_train", "y_train")]
 
-print(head(training_data$x_train))
-print(head(training_data$y_train))
+# print(head(training_data$x_train))
+# print(head(training_data$y_train))
 
 result = myRelaxedFinal(training_data$x_train, training_data$y_train)
-print(result$CV_MSEs)
+print(result$best_fit$coefficients)
 
 relaxed_fit = cv.glmnet(training_data$x_train, training_data$y_train, gamma = 0, nfolds = 5, relax = TRUE)
+print(relaxed_fit$glmnet.fit$relaxed$beta[, relaxed_fit$index[1]])
 ```
 
 # Run simulation

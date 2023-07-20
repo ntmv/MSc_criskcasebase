@@ -22,7 +22,7 @@ multi_deviance <- function(cb_data, fit_object) {
                                       w = rep(1, nrow(X)))
   
   return(dev)
-}
+} 
 
 ###############################################
 #' Create the case-base sampled dataset
