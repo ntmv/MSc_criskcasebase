@@ -36,7 +36,7 @@ source("../src/helper_functions.R")
 
 # Check final implementation
 ``` {r test-relaxed-lasso-final}
-p = 20
+p = 120
 n = 400
 
 dataset = generateDataset(p, n)
@@ -47,15 +47,19 @@ training_data = partitioned_data[c("x_train", "y_train")]
 # print(head(training_data$y_train))
 
 result = myRelaxedFinal(training_data$x_train, training_data$y_train)
-print(result$best_fit$coefficients)
-
 relaxed_fit = cv.glmnet(training_data$x_train, training_data$y_train, gamma = 0, nfolds = 5, relax = TRUE)
+
+print(t(as.list(result$coefficients[result$min_lambda_index, -1])))
 print(relaxed_fit$glmnet.fit$relaxed$beta[, relaxed_fit$index[1]])
+
+plot = plot_myRelaxed(result)
+plot(relaxed_fit)
+plot
 ```
 
 # Run simulation
 ``` {r run-sim, warning = FALSE, echo = FALSE, eval=FALSE}
-N = 500
+N = 5
 tic()
 sim_results = runSim(20, 400, N, FALSE)
 cat(paste("Time to compute ", as.character(N), " iterations: ", toc()))
@@ -67,7 +71,7 @@ cat(paste("Time to compute ", as.character(N), " iterations: ", toc()))
 ## Coefficient Biases
 
 ``` {r resulting-coefficients, echo=FALSE, eval=FALSE}
-formatCoefficientBiasTable(sim_results)
+formatCoefficientBiasTable(sim_results, p)
 ```
 
 ## Average Test MSEs

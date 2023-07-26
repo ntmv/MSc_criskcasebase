@@ -920,11 +920,74 @@ multinom.post_enet <- function(fit_object, cause = 1) {
   model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -ftime -fstatus,
                               data = testnew,
                               ratio = 100, time = "ftime")
+  
   coeffs <- matrix(coef(model_cb), nrow =  length(coef(model_cb))/2, byrow = TRUE)
   rownames(coeffs) <- c(colnames(testnew)[-length(colnames(testnew))], "Intercept")
   coef[non_zero_coefs_cause1] <- coeffs[1:length( non_zero_coefs_cause1)]
   return(list(coef_selected = coeffs, non_zero_coefs = non_zero_coefs_cause1, coefs_all = coef))
 }
+
+
+
+########### Sketch of function for post-LASSO (or post elastic net in this case) #########
+# Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
+multinom.post_enet_old <- function(train, test) {
+  # Train case-base model to get lambda.min
+  cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = 5)
+  # This fit (with lambda.min) needs to be de-biased
+  # Fit on test set
+  # Covariance matrix
+  cov_val <- cbind(test[, c(grepl("X", colnames(test)))], time = log(test$ftime))
+  
+  # Case-base dataset
+  surv_obj_val <- with(test, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+  cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
+  
+  # Case-base fits
+  # Lambda.min
+  fit_val_min <- fit_cbmodel(cb_data_val, regularization = 'elastic-net',
+                             lambda = cv.lambda$lambda.min, alpha = 0.7, unpen_cov = 2)
+  
+  # Obtain all non-zero selected covariates across both classes
+  non_zero_coefs_cause1 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 1] != 0)
+  non_zero_coefs_cause2 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 2] != 0)
+  # Combine them
+  non_zero_coefs <- union(non_zero_coefs_cause1, non_zero_coefs_cause2)
+  non_zero_coefs <- paste("X", non_zero_coefs , sep = "")
+  # Create new subsetted dataset
+  testnew_1 <- cbind(test[, c(colnames(test) %in% non_zero_coefs)], ftime = (test$ftime), fstatus = test$fstatus)
+  # Fit "OLS" (unparameterized multinomial model)
+  # For working of this function see: http://sahirbhatnagar.com/casebase/articles/competingRisk.html
+  model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+                              data = testnew_1,
+                              ratio = 100,
+                              time = "ftime")
+  
+  # Only return estimated coefficients of covariates
+  exclude_coefs = c("(Intercept):1", "(Intercept):2", "ftime:1", "ftime:2",
+                    "log(ftime):1", "log(ftime):2")
+  est_betas = coef(model_cb)[names(coef(model_cb))
+                             %in% exclude_coefs == FALSE]
+  # all_coef_names =
+  # 
+  # for (l in c(1:length(coefs_all_lambdas))) {
+  #   if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
+  #     break
+  #   if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
+  #     coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
+  #     j = j + 1
+  #   }
+  # }
+  
+  est_betas = est_betas[1:20]
+  
+  res <- list(coefficients = est_betas, lambda.min = cv.lambda$lambda.min,
+              lambdagrid = cv.lambda$lambdagrid)
+  
+  res
+}
+
+
 
 
 ############################## Multinom CV function for compute canada #################

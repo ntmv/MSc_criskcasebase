@@ -442,6 +442,9 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
   return (result)
 }
 
+
+
+
 formatNewRow = function(current_coefficients, new_row) {
   coefs_all_lambdas[rows+1,] = 0
   j = 1
@@ -455,6 +458,8 @@ formatNewRow = function(current_coefficients, new_row) {
     }
   } 
 }
+
+
 
 
 #' Fits linear regression using relaxed LASSO regularization to given data
@@ -608,7 +613,7 @@ myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
 
 
 generateDataset = function(p, n) {
-  beta = c(rep(1, 11), rep(0, 10))
+  beta = c(rep(5, p/2 + 1), rep(0, p/2))
   beta = as.matrix(beta)
   beta_neg = -beta
   
@@ -687,11 +692,11 @@ computeMSEs = function(resulting_fits, test_data) {
 
   
   # Compute MSE
-  mse_relaxed_min <- sum((pred_fit_relaxed_min - test_data$y_test)^2)
-  mse_myRelaxed <- sum((pred_myRelaxed - test_data$y_test)^2)
-  mse_myRelaxed_cv <- sum((pred_myRelaxed_cv - test_data$y_test)^2)
-  mse_myRelaxed_new_cv <- sum((pred_myRelaxed_new_cv - test_data$y_test)^2)
-  mse_post_lasso_min <- sum((pred_fit_post_lasso_min - test_data$y_test)^2)
+  mse_relaxed_min <- mean((pred_fit_relaxed_min - test_data$y_test)^2)
+  mse_myRelaxed <- mean((pred_myRelaxed - test_data$y_test)^2)
+  mse_myRelaxed_cv <- mean((pred_myRelaxed_cv - test_data$y_test)^2)
+  mse_myRelaxed_new_cv <- mean((pred_myRelaxed_new_cv - test_data$y_test)^2)
+  mse_post_lasso_min <- mean((pred_fit_post_lasso_min - test_data$y_test)^2)
 
   MSEs = data.frame(matrix(nrow = 5, ncol = 2))
   colnames(MSEs) = c("Model", "Test MSE")
@@ -822,8 +827,8 @@ formatCoefficientTableRow = function(non_zero_coefficients, column_names) {
 }
 
 
-formatCoefficientBiasTable = function(sim_results) {
-  betas = c(rep(1, 10), rep(0, 10))
+formatCoefficientBiasTable = function(sim_results, p) {
+  betas = c(rep(5, p/2), rep(0, p/2))
   
   model_fit_labels = c("cv.glmnet relax = TRUE, lambda min",
                        "Relaxed LASSO implementation, glmnet(), start CV AFTER predictors selected", 

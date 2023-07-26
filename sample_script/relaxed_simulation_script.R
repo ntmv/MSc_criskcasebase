@@ -17,12 +17,16 @@ library(dplyr)
 # Helper functions 
 source("../src/helper_functions.R")
 
+n = 400
+p = 120
+N = 1000
+
 # Run simulation
-sim_results = runSim(20, 400, 1000, TRUE)
+sim_results = runSim(p, n, N, TRUE)
 
 
 # Get coefficient biases
-bias_table = formatCoefficientBiasTable(sim_results)
+bias_table = formatCoefficientBiasTable(sim_results, p)
 
 # Get average test prediction MSE
 prediction_MSE_table = formatAverageTestMSETable(sim_results)
