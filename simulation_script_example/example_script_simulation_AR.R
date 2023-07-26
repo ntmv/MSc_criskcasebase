@@ -206,147 +206,9 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
   Results
 }
 
-# res1 <- multinom.post_enet(train, test)
-# res_cb_post_lasso <- varsel_perc(res$coefficients, beta1)
-
-results_table = runCasebaseSim(400, 20, 5)
-
-
-
-
-formatCaseBaseTable = function(sim_results) {
-  # sim_results = results_table
-  
-  model_fit_labels = c("casebase.post.lasso.lambda.min", "casebase.lambda.min_cause1", "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
-                       "cox.lambda.min_cause2", "pencr.lambda.mincause1", "pencr.lambda.mincause2", "cens.prop")
-  
-  stat_names = colnames(as.data.frame(sim_results))
-  
-  num_models = length(model_fit_labels)
-  rows = nrow(sim_results)
-  # Add model name to model column
-  model_list = c()
-  for (i in c(1:rows)) {
-    index = i %% num_models
-    if (i %% num_models == 0)
-      index = num_models
-    curr_model = model_fit_labels[index]
-    model_list = c(model_list, curr_model)
-  }
-  
-  sim_results["Model"] = model_list
-  
-  formatted_table = data.frame(matrix(nrow = 0, ncol = length(sim_results)))
-  col_names = colnames(as.data.frame(sim_results))
-  colnames(formatted_table) = col_names
-
-  for (i in model_fit_labels) {
-    stat_table = sim_results[stat_names]
-    average_stat_row = colMeans((sim_results %>% filter(Model == i))[1:ncol(sim_results) - 1])
-    formatted_table = rbind(formatted_table, c(average_stat_row, i))
-  }
-  colnames(formatted_table) = col_names
-  formatted_table = formatted_table %>% replace(is.na(.), NaN)  
-  # formatted_table[, ncol(formatted_table) - 1] = lapply(formatted_table[, ncol(formatted_table) - 1], as.numeric)
-  
-  options(digits = 5)
-  
-  # formatted_table[, ncol(formatted_table) - 1] = round_df(formatted_table[, ncol(formatted_table) - 1], 3)
-  
-  # Make model column the first column of df
-  formatted_table = formatted_table[,c(ncol(formatted_table), seq(1:ncol(formatted_table) - 1))]
-  formatted_table = formatted_table[1:ncol(formatted_table) - 1]
-  
-  return(formatted_table)
-}
-
-summarizedSimCaseBaseTable = formatCaseBaseTable(results_table)
-
-
-
-
-
-
-############ Sketch of function for post-LASSO (or post elastic net in this case) #########
-# Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
-# multinom.post_enet <- function(train, test) {
-#   # Train case-base model to get lambda.min
-#   cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = 5)
-#   # This fit (with lambda.min) needs to be de-biased
-#   # Fit on test set 
-#   # Covariance matrix
-#   cov_val <- cbind(test[, c(grepl("X", colnames(test)))], time = log(test$ftime))
-#   
-#   # Case-base dataset
-#   surv_obj_val <- with(test, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-#   cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
-#   
-#   # Case-base fits 
-#   # Lambda.min
-#   fit_val_min <- fit_cbmodel(cb_data_val, regularization = 'elastic-net',
-#                              lambda = cv.lambda$lambda.min, alpha = 0.7, unpen_cov = 2)
-#   
-#   # Obtain all non-zero selected covariates across both classes
-#   non_zero_coefs_cause1 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 1] != 0)
-#   non_zero_coefs_cause2 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 2] != 0)
-#   # Combine them 
-#   non_zero_coefs <- union(non_zero_coefs_cause1, non_zero_coefs_cause2)
-#   non_zero_coefs <- paste("X", non_zero_coefs , sep = "")
-#   # Create new subsetted dataset 
-#   testnew <- cbind(test[, c(colnames(test) %in% non_zero_coefs)], ftime = (test$ftime), fstatus = test$fstatus)
-#   # Fit "OLS" (unparameterized multinomial model)
-#   # For working of this function see: http://sahirbhatnagar.com/casebase/articles/competingRisk.html
-#   model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
-#                               data = testnew,
-#                               ratio = 100,
-#                               time = "ftime")
-#   
-#   # Only return estimated coefficients of covariates
-#   exclude_coefs = c("(Intercept):1", "(Intercept):2", "ftime:1", "ftime:2", 
-#                     "log(ftime):1", "log(ftime):2")
-#   est_betas = coef(model_cb)[names(coef(model_cb))
-#                              %in% exclude_coefs == FALSE]
-#   all_coef_names = 
-#   
-#   for (l in c(1:length(coefs_all_lambdas))) {
-#     if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
-#       break
-#     if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
-#       coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
-#       j = j + 1
-#     }
-#   }
-#   
-#   est_betas = est_betas[1:20]
-#   
-#   res <- list(coefficients = est_betas, lambda.min = cv.lambda$lambda.min,
-#               lambdagrid = cv.lambda$lambdagrid)
-#   
-#   res
-# }
-
-
-################### Post-LASSO function #################################
-############ Sketch of function for post-LASSO (or post elastic net in this case) #########
-# Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
-multinom.post_enet <- function(fit_object, cause = 1) {
-  # Obtain all non-zero selected covariates from cause 1 
-  coef <- fit_val_min$coefficients[1:eval(parse(text="p")), 1]
-  non_zero_coefs_cause1 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 1] != 0)
-  non_zero_coefs <- paste("X", non_zero_coefs_cause1, sep = "")
-  # Create new subsetted dataset 
-  testnew <- cbind(test[, c(colnames(test) %in% non_zero_coefs)], ftime = (test$ftime), fstatus = test$fstatus)
-  # Fit "OLS" (unparameterized multinomial model)
-  model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -ftime -fstatus,
-                              data = testnew,
-                              ratio = 100, time = "ftime")
-  coeffs <- matrix(coef(model_cb), nrow =  length(coef(model_cb))/2, byrow = TRUE)
-  rownames(coeffs) <- c(colnames(testnew)[-length(colnames(testnew))], "Intercept")
-  coef[non_zero_coefs_cause1] <- coeffs[1:length( non_zero_coefs_cause1)]
-  return(list(coef_selected = coeffs, non_zero_coefs = non_zero_coefs_cause1, coefs_all = coef))
-}
-
-
+regularization = 'elastic-net'; lambda_max = NULL; alpha = 1; nfold = 10; 
+constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE; 
+ncores = parallelly::availableCores(); seed = NULL; train_ratio = 20
 
 
 ###########################################################
@@ -394,57 +256,169 @@ multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_
   all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   non_zero_coefs <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   lowest_deviance = .Machine$double.xmax
+  
+  current_deviance = .Machine$double.xmax
   best_fit = NULL
   min_lambda_index = 0
-  for (j in lambdagrid) {
-    curr_lambda_deviance = 0
-    #Perform 10 fold cross validation
-    for(i in 1:nfold){
-      #Segment your data by fold using the which() function 
-      train_cv <- cb_data_train[which(folds != i), ] #Set the training set
-      test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
-      # Create X and Y
-      train_cv <- list("time" = train_cv$time,
-                       "event_ind" = train_cv$event_ind,
-                       "covariates" = train_cv[, grepl("covariates", names(train_cv))],
-                       "offset" = train_cv$offset)
-      # Standardize
-      train_cv$covariates <- as.data.frame(scale(train_cv$covariates, center = T, scale = T))
-      cvs_res <- mclapply(lambdagrid, 
-                          function(lambda_val) {
-                            fit_cbmodel(train_cv, regularization = 'elastic-net',
-                                        lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
-                          }, mc.cores = ncores, mc.set.seed = seed)
-      test_cv <- list("time" = test_cv$covariates.time,
-                      "event_ind" = test_cv$event_ind,
-                      "covariates" = as.matrix(test_cv[, grepl("covariates", names(test_cv))]),
-                      "offset" = test_cv$offset)
-      # Standardize
-      test_cv$covariates <- as.data.frame(scale(test_cv$covariates, center = T, scale = T))
-      mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
-      all_deviances[, i] <- mult_deviance
-      non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
-      cat("Completed Fold", i, "\n")
+
+  #Perform 10 fold cross validation
+  for(i in 1:nfold){
+    #Segment your data by fold using the which() function 
+    train_cv_cb <- cb_data_train[which(folds != i), ] #Set the training set
+    # Create X and Y
+    train_cv_cb <- list("time" = train_cv_cb$time,
+                     "event_ind" = train_cv_cb$event_ind,
+                     "covariates" = train_cv_cb[, grepl("covariates", names(train_cv_cb))],
+                     "offset" = train_cv_cb$offset)
+    # Standardize
+    train_cv_cb$covariates <- as.data.frame(scale(train_cv_cb$covariates, center = T, scale = T))
+    cvs_res <- mclapply(lambdagrid, 
+                        function(lambda_val) {
+                          fit_cbmodel(train_cv_cb, regularization = 'elastic-net',
+                                      lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
+                        }, mc.cores = ncores, mc.set.seed = seed)
+    
+    
+    cvs_res_unlisted = unlist(lapply(cvs_res, function(x) {return(x$coefficients)}))
+    
+    # Obtain all non-zero selected covariates across both causes
+    cvs_non_zero_coefs_cause1 <- mclapply(cvs_res_unlisted,
+                        function(cb_fit_obj) {
+                          which(cb_fit_obj[1:eval(parse(text="p")), 1] != 0)
+                        }, mc.cores = ncores, mc.set.seed = seed)
+
+
+    cvs_non_zero_coefs_cause2 <- mclapply(cvs_res_unlisted,
+                                          function(cb_fit_obj) {
+                                            which(cb_fit_obj[1:eval(parse(text="p")), 2] != 0)
+                                          }, mc.cores = ncores, mc.set.seed = seed)
+    
+    train_unparameterized_cv <- cb_data_train[which(folds != i), ] #Set the training set
+    # covariate_names = lapply(colnames(train_unparameterized_cv)[2:22], function(x){substring(text = x, first = 12)})
+    # colnames(train_unparameterized_cv) = c(colnames(train_unparameterized_cv)[1], covariate_names, colnames(train_unparameterized_cv)[23])
+    
+    test_unparameterized_cv <- cb_data_train[which(folds == i), ] #Set the validation set
+    
+    # unparameterized_hazards = mclapply(cvs_non_zero_coefs_cause1, 
+    #                                  function(list_cause1, list_cause2) {
+    #                                    non_zero_coefs <- union(list_cause1, list_cause2)
+    #                                    paste("X", non_zero_coefs , sep = "")
+    #                                    trainnew <- cbind(train_cv[, c(colnames(train_cv) %in% non_zero_coefs)],
+    #                                                      ftime = (train_cv$ftime), fstatus = train_cv$fstatus)
+    #                                    fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+    #                                                                data = trainnew,
+    #                                                                ratio = 100,
+    #                                                                time = "ftime")
+    #                                  },
+    #                                  cvs_non_zero_coefs_cause2,
+    #                                  mc.cores = ncores, mc.set.seed = seed)
+    
+    
+    # TODO: Replace with mclapply (figure out how to use mclapply with nested lists)
+    for (l in c(1:length(lambdagrid))) {
+    # for (l in c(1:3)) {
+      print(paste("CURRENT LAMBDA VALUE: ", as.character(lambdagrid[l])))
+      non_zero_coefs <- union(cvs_non_zero_coefs_cause1[[l]], cvs_non_zero_coefs_cause2[[l]])
+      non_zero_coefs <- paste("covariate.X", non_zero_coefs , sep = "")
+      
+      
+      trainnew <- cbind(train_unparameterized_cv[, c(colnames(train_unparameterized_cv) %in% non_zero_coefs)], 
+                        ftime = (train_unparameterized_cv$time), fstatus = train_unparameterized_cv$event_ind)
+
+
+      model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+                                  data = trainnew,
+                                  time = "ftime")
+      
+      all_deviances[l, i] = deviance(model_cb)
+    
+      
+      exclude_coefs = c("(Intercept):1", "(Intercept):2", "ftime:1", "ftime:2",
+                        "log(ftime):1", "log(ftime):2")
+      est_betas = coef(model_cb)[names(coef(model_cb))
+                                 %in% exclude_coefs == FALSE]
+      non_zero_coefs[l, i] = est_betas
     }
+    cat("Completed Fold", i, "\n")
   }
+  
   mean_dev <- rowMeans(all_deviances)
   lambda.min <- lambdagrid[which.min(mean_dev)]
   sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
+  
   if (sel_lambda_min  == 2*constant_covariates) {
     cat("Null model chosen: choosing first non-null model lambda")
     lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
   }
+  
   cv_se <- sqrt(var(mean_dev))
-  dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
-  dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
-  range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
-  lambda.1se <- max(range.1se)
-  lambda.min1se <- min(range.1se)
-  range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
-  lambda.0.5se <- max(range.0.5se)
-  lambda.min0.5se <- min(range.0.5se)
   rownames(all_deviances) <- lambdagrid
   rownames(non_zero_coefs) <- lambdagrid
-  return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
-              lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances))
+  return(list(lambda.min = lambda.min, non_zero_coefs = non_zero_coefs, lambdagrid = lambdagrid, 
+              cv_se = cv_se, deviance_grid = all_deviances))
+}
+
+
+
+############################### TEST CODE ######################
+# res1 <- multinom.post_enet_old(train, test)
+# res2 <- multinom.post_enet(train, test)
+# res1_cb_post_lasso <- varsel_perc(res1$coefficients, beta1)
+# res2_cb_post_lasso <- varsel_perc(res2$coefficients, beta1)
+
+res_relaxed = multinom.relaxed_enet(train = train, seed = 2023)
+
+results_table = runCasebaseSim(400, 20, 5)
+summarizedSimCaseBaseTable = formatCaseBaseTable(results_table)
+
+
+
+
+
+
+
+formatCaseBaseTable = function(sim_results) {
+  # sim_results = results_table
+  
+  model_fit_labels = c("casebase.post.lasso.lambda.min", "casebase.lambda.min_cause1", "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
+                       "cox.lambda.min_cause2", "pencr.lambda.mincause1", "pencr.lambda.mincause2", "cens.prop")
+  
+  stat_names = colnames(as.data.frame(sim_results))
+  
+  num_models = length(model_fit_labels)
+  rows = nrow(sim_results)
+  # Add model name to model column
+  model_list = c()
+  for (i in c(1:rows)) {
+    index = i %% num_models
+    if (i %% num_models == 0)
+      index = num_models
+    curr_model = model_fit_labels[index]
+    model_list = c(model_list, curr_model)
+  }
+  
+  sim_results["Model"] = model_list
+  
+  formatted_table = data.frame(matrix(nrow = 0, ncol = length(sim_results)))
+  col_names = colnames(as.data.frame(sim_results))
+  colnames(formatted_table) = col_names
+  
+  for (i in model_fit_labels) {
+    stat_table = sim_results[stat_names]
+    average_stat_row = colMeans((sim_results %>% filter(Model == i))[1:ncol(sim_results) - 1])
+    formatted_table = rbind(formatted_table, c(average_stat_row, i))
+  }
+  colnames(formatted_table) = col_names
+  formatted_table = formatted_table %>% replace(is.na(.), NaN)
+  # formatted_table[, ncol(formatted_table) - 1] = lapply(formatted_table[, ncol(formatted_table) - 1], as.numeric)
+  
+  options(digits = 5)
+  
+  # formatted_table[, ncol(formatted_table) - 1] = round_df(formatted_table[, ncol(formatted_table) - 1], 3)
+  
+  # Make model column the first column of df
+  formatted_table = formatted_table[,c(ncol(formatted_table), seq(1:ncol(formatted_table) - 1))]
+  formatted_table = formatted_table[1:ncol(formatted_table) - 1]
+  
+  return(formatted_table)
 }
