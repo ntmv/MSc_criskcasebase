@@ -958,30 +958,32 @@ multinom.post_enet_old <- function(train, test) {
   testnew_1 <- cbind(test[, c(colnames(test) %in% non_zero_coefs)], ftime = (test$ftime), fstatus = test$fstatus)
   # Fit "OLS" (unparameterized multinomial model)
   # For working of this function see: http://sahirbhatnagar.com/casebase/articles/competingRisk.html
-  model_cb <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+  model_cb1 <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
                               data = testnew_1,
                               ratio = 100,
                               time = "ftime")
   
   # Only return estimated coefficients of covariates
-  exclude_coefs = c("(Intercept):1", "(Intercept):2", "ftime:1", "ftime:2",
-                    "log(ftime):1", "log(ftime):2")
-  est_betas = coef(model_cb)[names(coef(model_cb))
-                             %in% exclude_coefs == FALSE]
-  # all_coef_names =
-  # 
-  # for (l in c(1:length(coefs_all_lambdas))) {
-  #   if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
-  #     break
-  #   if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
-  #     coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
-  #     j = j + 1
-  #   }
-  # }
+  exclude_coefs = c("(Intercept):1", "ftime:1",
+                    "log(ftime):1", "(Intercept):2", "ftime:2",
+                    "log(ftime):2")
   
-  est_betas = est_betas[1:20]
+  selected_beta_names = names(coef(model_cb1))[!(names(coef(model_cb1)) %in% exclude_coefs)]
   
-  res <- list(coefficients = est_betas, lambda.min = cv.lambda$lambda.min,
+  all_coef_names_cause1 =  paste("X", seq(1:20), ":1", sep ="")
+  all_coef_names_cause2 =  paste("X", seq(1:20), ":2", sep ="")
+  
+  est_betas = coef(model_cb1)[names(coef(model_cb1)) %in% selected_beta_names]
+  est_betas_cause1 = est_betas[names(est_betas) %in% all_coef_names_cause1]
+  est_betas_cause2 = est_betas[names(est_betas) %in% all_coef_names_cause2]
+  
+  est_betas_cause1 = formatEstimatedCoefs(est_betas_cause1, all_coef_names_cause1)
+  est_betas_cause2 = formatEstimatedCoefs(est_betas_cause2, all_coef_names_cause2)
+  
+  coefs_matrix = cbind(est_betas_cause1, est_betas_cause2)
+  rownames(coefs_matrix) = paste("X", seq(1:20), sep ="")
+  
+  res <- list(coefficients = coefs_matrix, lambda.min = cv.lambda$lambda.min,
               lambdagrid = cv.lambda$lambdagrid)
   
   res
@@ -1153,3 +1155,4 @@ mtool.multinom.cv_cluster <- function(train, regularization = 'elastic-net', lam
   return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
               lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances))
 }
+
