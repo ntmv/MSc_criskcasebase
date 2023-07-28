@@ -931,10 +931,10 @@ multinom.post_enet <- function(fit_object, cause = 1) {
 
 ########### Sketch of function for post-LASSO (or post elastic net in this case) #########
 # Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
-multinom.post_enet_old <- function(train, test, nfolds) {
+multinom.post_enet_old <- function(train, test, nfolds, seed = 2023) {
   p = ncol(train) - 2
   # Train case-base model to get lambda.min
-  cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = nfolds)
+  cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfolds)
   # This fit (with lambda.min) needs to be de-biased
   # Fit on test set
   # Covariance matrix

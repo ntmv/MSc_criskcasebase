@@ -22,7 +22,6 @@ myRelaxedGlmnetFolds = function(train_data, response, folds = 5, print_time) {
     colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
     MSEs_all_lambda = c()
     
-    set.seed(2023)
     fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, nfolds = folds, alpha=1)
     all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
 
@@ -138,7 +137,6 @@ myRelaxedGlmnetFolds = function(train_data, response, folds = 5, print_time) {
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
                 min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
-  set.seed(NULL)
   return (result)
 }
 
@@ -160,7 +158,6 @@ myRelaxedCustomFolds = function(train_data, response, cv, folds = 5, print_time)
     # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
     
     #Perform cross-validation
-    set.seed(2023)
     folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
     res = list()
     mse_values = c()
@@ -214,7 +211,6 @@ myRelaxedCustomFolds = function(train_data, response, cv, folds = 5, print_time)
     MSEs_all_lambda = c()
     
     if (cv) {
-      set.seed(2023)
       fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, alpha=1)
       all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
     }
@@ -290,7 +286,6 @@ myRelaxedCustomFolds = function(train_data, response, cv, folds = 5, print_time)
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
                 min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
-  set.seed(NULL)
   return (result)
 }
 
@@ -338,7 +333,6 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
       
       # Perform cross-validation
       # TODO: Check if there's a difference between creating folds outside lambda loop or inside lambda loop
-      set.seed(2023)
       folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
       res = list()
       mse_values = c()
@@ -356,7 +350,6 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
         y_train = response[train_indices]
         y_valid = response[-train_indices]
         
-        # TODO: Check if setting seed v.s. not setting seed here gives different results
         fit_en = glmnet(k_minus_1_train_data, y_train, family="gaussian", alpha=1, lambda = all_lambdas[i])
         
         
@@ -441,7 +434,6 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_folds_MSEs = mse_matrix, all_lambdas = all_lambdas, 
                 min_lambda = all_lambdas[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
-  set.seed(NULL)
   return (result)
 }
 
@@ -507,7 +499,6 @@ myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
       # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
       
       #Perform cross-validation
-      set.seed(2023)
       folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
       res = list()
       mse_values = c()
@@ -591,7 +582,6 @@ myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
   result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
                 min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
                 best_fit = best_fit)
-  set.seed(NULL)
   return (result)
 }
 
@@ -911,9 +901,9 @@ plot_myRelaxed = function(relaxed_object) {
 
 
 
-regularization = 'elastic-net'; lambda_max = NULL; alpha = 1; nfold = 10; 
-constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE; 
-ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l = 1;
+# regularization = 'elastic-net'; lambda_max = NULL; alpha = 1; nfold = 10; 
+# constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE; 
+# ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l = 1;
 
 
 ################################################# Multinomial LR helper functions ##################################################
@@ -1124,11 +1114,10 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
     N = 5
     Results <- replicate(N, {
       # Set seed
-      seed <- as.integer(Sys.time())
-      
       # take the last five digits of the initial seed
-      the_seed= seed %% 100000
-      set.seed(the_seed)
+      # seed = as.integer(Sys.time())
+      # the_seed= seed %% 100000
+      # set.seed(the_seed)
       
       num_true <- 20
       beta1 <- c(rep(0, p))
@@ -1257,7 +1246,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
       
       # Train case-base model 
-      cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = nfolds)
+      cv.lambda <- mtool.multinom.cv(train, seed = 2023, nfold = nfolds)
       
       # Case-base fits 
       # Lambda.min

@@ -26,7 +26,7 @@ source("src/helper_functions.R")
 # res1_cb_post_lasso <- varsel_perc(res1$coefficients, beta1)
 # res2_cb_post_lasso <- varsel_perc(res2$coefficients, beta1)
 
-
+seed = 2023
 n = 400
 p = 20
 N = 3
