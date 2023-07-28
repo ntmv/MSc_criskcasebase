@@ -924,6 +924,7 @@ ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l =
 multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                                   constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                                   ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
+  p = ncol(train) - 2
   surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
   cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
   # Create case-base dataset
@@ -997,21 +998,31 @@ multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_
     # Obtain all non-zero selected covariates across both causes
     cvs_non_zero_coefs_cause1 <- mclapply(cvs_res_unlisted,
                                           function(cb_fit_obj) {
-                                            selected <- which(cb_fit_obj[1:(eval(parse(text="p")) + 1), 1] != 0)
-                                            if((eval(parse(text="p")) + 1) %in% selected) {
-                                              selected = c(selected[1:length(selected) - 1], "covariates.time")
-                                            }
-                                            selected
+                                            tryCatch({
+                                              selected <- which(cb_fit_obj[1:(p + 1), 1] != 0)
+                                              if((p + 1) %in% selected) {
+                                                selected = c(selected[1:length(selected) - 1], "covariates.time")
+                                              }
+                                              selected
+                                            },
+                                            error = function(e) {
+                                              print(e)
+                                            })
                                           }, mc.cores = ncores, mc.set.seed = seed)
     
     
     cvs_non_zero_coefs_cause2 <- mclapply(cvs_res_unlisted,
                                           function(cb_fit_obj) {
-                                            selected <- which(cb_fit_obj[1:(eval(parse(text="p")) + 1), 2] != 0)
-                                            if((eval(parse(text="p")) + 1) %in% selected) {
-                                              selected = c(selected[1:length(selected) - 1], "covariates.time")
-                                            }
-                                            selected
+                                            tryCatch({
+                                              selected <- which(cb_fit_obj[1:(p + 1), 2] != 0)
+                                              if((p + 1) %in% selected) {
+                                                selected = c(selected[1:length(selected) - 1], "covariates.time")
+                                              }
+                                              selected
+                                            },
+                                            error = function(e) {
+                                              print(e)
+                                            })
                                           }, mc.cores = ncores, mc.set.seed = seed)
     
     train_unparameterized_cv <- cb_data_train[which(folds != i), ] #Set the training set
@@ -1054,6 +1065,7 @@ multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_
                       "covariates" = test_unparameterized_cv[, c(colnames(test_unparameterized_cv) %in% non_zero_coefs)],
                       "offset" = test_unparameterized_cv$offset)
       
+  
       deviance = multi_deviance_fsh(testnew, coefs)
       
       
@@ -1104,7 +1116,7 @@ multi_deviance_fsh <- function(cb_data, coefs) {
 ###########################################################
 #' Runs simulation of hazard function fits
 
-runCasebaseSim = function(n = 400, p = 20, N = 5) {
+runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
   tryCatch({
     # For each simulation you want to output the MSE
     n = 400
@@ -1141,6 +1153,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
       train.index <- caret::createDataPartition(sim.data$fstatus, p = 0.75, list = FALSE)
       train <- sim.data[train.index,]
       test <- sim.data[-train.index,]
+
       
       ##############################################################
       # We have two competitor models for variable selection:
@@ -1159,7 +1172,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
       x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
       
       # Fit cause-specific cox model with glmnet on training set 
-      cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7)
+      cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7, folds = nfolds)
       
       # Fit on validation set 
       cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
@@ -1184,7 +1197,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
       x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
       
       # Fit cause-specific cox model with glmnet on training set 
-      cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7)
+      cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7, folds = nfolds)
       
       # Fit on validation set 
       cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
@@ -1203,7 +1216,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
       ########################## Fit PenCR model ##################################
       penCR = cv.glmnet.CR(data = train, family="cox", alpha= 0.7, standardize= TRUE,
                            nlambda = 20, t.BS = median(train$ftime), seed = 115, causeOfInt = 1,
-                           nfold = 5)
+                           nfold = nfolds)
       
       cc_min_penCR1 <- penCR$glmnet.fits$models$`Cause 1`$glmnet.res$lambda[penCR$min.index[1]]
       cc_min_penCR2 <- penCR$glmnet.fits$models$`Cause 2`$glmnet.res$lambda[penCR$min.index[2]]
@@ -1244,7 +1257,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
       cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
       
       # Train case-base model 
-      cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = 5)
+      cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = nfolds)
       
       # Case-base fits 
       # Lambda.min
@@ -1252,56 +1265,71 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
                                  lambda = cv.lambda$lambda.min , alpha = 0.7, unpen_cov = 2)
       
       
-      res_cb_min1 <- varsel_perc(fit_val_min$coefficients[1:eval(parse(text="p")), 1], beta1)
+      res_cb_min1 <- varsel_perc(fit_val_min$coefficients[1:p, 1], beta1)
       
-      res_cb_min2 <- varsel_perc(fit_val_min$coefficients[1:eval(parse(text="p")), 2], beta2)
+      res_cb_min2 <- varsel_perc(fit_val_min$coefficients[1:p, 2], beta2)
       
       # Calculate MSE here as well!
       # MSE for casebase model for cause of interest
-      fit_val_coef_1 <- fit_val_min$coefficients[1:eval(parse(text="p")), 1]
+      fit_val_coef_1 <- fit_val_min$coefficients[1:p, 1]
       mean((beta1[nu_ind] - fit_val_coef_1[nu_ind])^2)
       
       # MSE for casebase model for competing risk
-      fit_val_coef_2 <- fit_val_min$coefficients[1:eval(parse(text="p")), 2]
+      fit_val_coef_2 <- fit_val_min$coefficients[1:p, 2]
       cb_min_bias <- which(fit_val_coef_2 != 0)
       mean((fit_val_coef_2[nu_ind] - beta2[nu_ind])^2)
       
       
       ########################## Fit casebase model with post LASSO#################################
       
-      res <- multinom.post_enet_old(train, test)
+      res <- multinom.post_enet_old(train, test, nfolds = nfolds)
       
       
       # Calculate MSE for this as well (fill in here)
       mean((res$coefficients[nu_ind, 1]- beta1[nu_ind])^2)
       mean((res$coefficients[nu_ind, 2] - beta2[nu_ind])^2)
       
-      res_cb_post_lasso <- varsel_perc(res$coefficients, beta1)
+      res_cb_post_lasso1 <- varsel_perc(res$coefficients[nu_ind, 1], beta1)
+      res_cb_post_lasso2 <- varsel_perc(res$coefficients[nu_ind, 2], beta2)
+      
       
       ########################## Fit casebase model with relaxed LASSO#################################
       
-      res <- multinom.relaxed_enet(train, seed = 2023)
+      res <- multinom.relaxed_enet(train, nfold = nfolds, seed = 2023)
       
-      model_final1 <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
-                                  data = trainnew,
-                                  time = "ftime")
-      
-      model_final2 <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
-                                      data = trainnew,
+      model_final <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+                                      data = test,
                                       time = "ftime",
                                       lambda = res$lambda.min)
       
+      all_coef_names_cause1 =  paste("X", seq(1:20), ":1", sep ="")
+      all_coef_names_cause2 =  paste("X", seq(1:20), ":2", sep ="")
+      
+      exclude_coefs = c("(Intercept):1", "ftime:1",
+                        "log(ftime):1", "(Intercept):2", "ftime:2",
+                        "log(ftime):2")
+      
+      est_betas = coef(model_final)[!(names(coef(model_final)) %in% exclude_coefs)]
+      est_betas_cause1 = est_betas[names(est_betas) %in% all_coef_names_cause1]
+      est_betas_cause2 = est_betas[names(est_betas) %in% all_coef_names_cause2]
+      
       
       # Calculate MSE for this as well (fill in here)
-      mean((coef(model_final)- beta1[nu_ind])^2)
-      mean((res$coefficients[nu_ind] - beta2[nu_ind])^2)
+      mean((est_betas_cause1 - beta1[nu_ind])^2)
+      mean((est_betas_cause2 - beta2[nu_ind])^2)
       
-      res_cb_post_lasso <- varsel_perc(res$coefficients, beta1)
+      res_cb_relaxed_lasso1 <- varsel_perc(est_betas_cause1, beta1)
+      res_cb_relaxed_lasso2 <- varsel_perc(est_betas_cause2, beta2)
       
       ###################################################################################
-      Res <- rbind(res_cb_post_lasso, res_cb_min1, res_cb_min2, res_cox_min1, res_cox_min2, res_pencr_min1, res_pencr_min2, cen.prop)
+      Res <- rbind(res_cb_relaxed_lasso1, res_cb_relaxed_lasso2, res_cb_post_lasso1, 
+                   res_cb_post_lasso2, res_cb_min1, res_cb_min2, 
+                   res_cox_min1, res_cox_min2, res_pencr_min1, res_pencr_min2, cen.prop)
       
-      rownames(Res) <- c("casebase.post.lasso.lambda.min", "casebase.lambda.min_cause1", "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
+      rownames(Res) <- c("casebase.relaxed.lasso.lambda.min_cause1", "casebase.relaxed.lasso.lambda.min_cause2", 
+                         "casebase.post.lasso.lambda.min_cause1", "casebase.post.lasso.lambda.min_cause2", 
+                         "casebase.lambda.min_cause1", 
+                         "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
                          "cox.lambda.min_cause2", "pencr.lambda.mincause1", "pencr.lambda.mincause2", "cens.prop")
       
       Res
@@ -1327,8 +1355,11 @@ runCasebaseSim = function(n = 400, p = 20, N = 5) {
 formatCaseBaseTable = function(sim_results) {
   # sim_results = results_table
   
-  model_fit_labels = c("casebase.post.lasso.lambda.min", "casebase.lambda.min_cause1", "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
-                       "cox.lambda.min_cause2", "pencr.lambda.mincause1", "pencr.lambda.mincause2", "cens.prop")
+  model_fit_labels = c("casebase.relaxed.lasso.lambda.min_cause1", "casebase.relaxed.lasso.lambda.min_cause2", 
+                        "casebase.post.lasso.lambda.min_cause1", "casebase.post.lasso.lambda.min_cause2", 
+                        "casebase.lambda.min_cause1", 
+                        "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
+                        "cox.lambda.min_cause2", "pencr.lambda.mincause1", "pencr.lambda.mincause2", "cens.prop")
   
   stat_names = colnames(as.data.frame(sim_results))
   

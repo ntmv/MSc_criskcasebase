@@ -931,9 +931,10 @@ multinom.post_enet <- function(fit_object, cause = 1) {
 
 ########### Sketch of function for post-LASSO (or post elastic net in this case) #########
 # Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
-multinom.post_enet_old <- function(train, test) {
+multinom.post_enet_old <- function(train, test, nfolds) {
+  p = ncol(train) - 2
   # Train case-base model to get lambda.min
-  cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = 5)
+  cv.lambda <- mtool.multinom.cv(train, seed = 1, nfold = nfolds)
   # This fit (with lambda.min) needs to be de-biased
   # Fit on test set
   # Covariance matrix
@@ -949,8 +950,8 @@ multinom.post_enet_old <- function(train, test) {
                              lambda = cv.lambda$lambda.min, alpha = 0.7, unpen_cov = 2)
   
   # Obtain all non-zero selected covariates across both classes
-  non_zero_coefs_cause1 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 1] != 0)
-  non_zero_coefs_cause2 <- which(fit_val_min$coefficients[1:eval(parse(text="p")), 2] != 0)
+  non_zero_coefs_cause1 <- which(fit_val_min$coefficients[1:p, 1] != 0)
+  non_zero_coefs_cause2 <- which(fit_val_min$coefficients[1:p, 2] != 0)
   # Combine them
   non_zero_coefs <- union(non_zero_coefs_cause1, non_zero_coefs_cause2)
   non_zero_coefs <- paste("X", non_zero_coefs , sep = "")
