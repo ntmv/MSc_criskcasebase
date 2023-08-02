@@ -31,5 +31,5 @@ bias_table = formatCoefficientBiasTable(sim_results, p)
 # Get average test prediction MSE
 prediction_MSE_table = formatAverageTestMSETable(sim_results)
 
-write.csv(bias_table, file = paste("results/", as.character(runif(1)), "iid_coefficient_relaxed.csv"))
-write.csv(prediction_MSE_table, file = paste("results/", as.character(runif(1)), "_iid_MSE_relaxed.csv"))
+write.csv(bias_table, file = paste("results/", as.character(runif(1)), "iid_coefficient_relaxed_no_null_seed.csv"))
+write.csv(prediction_MSE_table, file = paste("results/", as.character(runif(1)), "_iid_MSE_relaxed_no_null_seed.csv"))
