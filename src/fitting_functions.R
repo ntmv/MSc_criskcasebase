@@ -135,8 +135,10 @@ mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max 
       non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
       lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
     }
+    lambda_max = max(initial_max_grid)
   }
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  
   cb_data_train <- as.data.frame(cb_data_train)
   cb_data_train <- cb_data_train %>%
     select(-time)
@@ -971,8 +973,8 @@ multinom.post_enet_old <- function(train, test, nfold = 5, seed = 2023) {
   
   selected_beta_names = names(coef(model_cb1))[!(names(coef(model_cb1)) %in% exclude_coefs)]
   
-  all_coef_names_cause1 =  paste("X", seq(1:20), ":1", sep ="")
-  all_coef_names_cause2 =  paste("X", seq(1:20), ":2", sep ="")
+  all_coef_names_cause1 =  paste("X", seq(1:p), ":1", sep ="")
+  all_coef_names_cause2 =  paste("X", seq(1:p), ":2", sep ="")
   
   est_betas = coef(model_cb1)[names(coef(model_cb1)) %in% selected_beta_names]
   est_betas_cause1 = est_betas[names(est_betas) %in% all_coef_names_cause1]
@@ -982,10 +984,10 @@ multinom.post_enet_old <- function(train, test, nfold = 5, seed = 2023) {
   est_betas_cause2 = formatEstimatedCoefs(est_betas_cause2, all_coef_names_cause2)
   
   coefs_matrix = cbind(est_betas_cause1, est_betas_cause2)
-  rownames(coefs_matrix) = paste("X", seq(1:20), sep ="")
+  rownames(coefs_matrix) = paste("X", seq(1:p), sep ="")
   
   res <- list(coefficients = coefs_matrix, lambda.min = cv.lambda$lambda.min,
-              lambdagrid = cv.lambda$lambdagrid)
+              lambdagrid = cv.lambda$lambdagrid, deviance_grid = cv.lambda$deviance_grid)
   
   res
 }
@@ -1076,6 +1078,7 @@ mtool.multinom.cv_cluster <- function(train, regularization = 'elastic-net', lam
     }
   }
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  
   cb_data_train <- as.data.frame(cb_data_train)
   # Remove the "time" column 
   cb_data_train <- cb_data_train %>%
