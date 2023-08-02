@@ -232,7 +232,7 @@ varsel_perc <- function(model_coef, true_coef) {
   mcc_den1 <- as.numeric((TP+FP)*(TP+FN))
   mcc_den2 <- as.numeric((TN+FP)*(TN+FN))
   mcc <- mcc_num/sqrt(mcc_den1*mcc_den2)
-  coef_bias <- mean((true_coef - model_coef)^2) / length(true_coef)
+  coef_bias <- mean((true_coef - model_coef)^2)
   dat <- as.data.frame(cbind(TP = TP, TN = TN, FP = FP, FN = FN, Sensitivity = sens, Specificity = spec, MCC = mcc, Coefficient_Bias = coef_bias))
   return(dat)
 }
@@ -931,7 +931,7 @@ multinom.post_enet <- function(fit_object, cause = 1) {
 
 ########### Sketch of function for post-LASSO (or post elastic net in this case) #########
 # Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
-multinom.post_enet_old <- function(train, test, nfold, seed = 2023) {
+multinom.post_enet_old <- function(train, test, nfold = 5, seed = 2023) {
   p = ncol(train) - 2
   # Train case-base model to get lambda.min
   cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfold)

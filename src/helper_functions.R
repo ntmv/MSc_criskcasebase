@@ -1017,12 +1017,10 @@ multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_
                           trainnew <- cbind(train_cv[, c(colnames(train_cv) %in% non_zero_coefs_no_time)],
                                             ftime = (time_train), train_cv["event_ind"])
 
-                          start_fsh <- Sys.time()
                           model_cb <- fitSmoothHazard(event_ind ~. +log(ftime) -event_ind,
                                                       data = trainnew,
                                                       time = "ftime")
-                          end_fsh <- Sys.time()
-                          cat(paste("TIME TO RUN fitSmoothHazard: ", start_fsh - end_fsh))
+                          
                           cause1_subset = as.logical(lapply(names(coef(model_cb)), grepl, pattern = ":1", fixed=TRUE))
                           cause2_subset = as.logical(lapply(names(coef(model_cb)), grepl, pattern = ":2", fixed=TRUE))
                           coefs = cbind(coef(model_cb)[cause1_subset], coef(model_cb)[cause2_subset])
@@ -1081,8 +1079,14 @@ multi_deviance_fsh <- function(cb_data, coefs) {
 ###########################################################
 #' Runs simulation of hazard function fits
 
-runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
-  tryCatch({
+runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5, seed) {
+  # n = 400
+  # p = 20
+  # N = 5
+  # nfolds = 5
+  # seed = 2023
+  
+  # tryCatch({
     # For each simulation you want to output the MSE
     Results <- replicate(N, {
       # Set seed
@@ -1091,13 +1095,15 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       # the_seed= seed %% 100000
       # set.seed(the_seed)
       
-      num_true <- 20
+      set.seed(seed)
+      
+      num_true <- p/2
       beta1 <- c(rep(0, p))
       beta2 <- c(rep(0, p))
       nu_ind <- seq(num_true)
       # Here out of 20 predictors, 10 should be non-zero 
-      beta1[nu_ind] <- c(rep(1, 10), rep(0, 10))
-      beta2[nu_ind] <- c(rep(-1, 10), rep(0, 10))
+      beta1[nu_ind] <- c(rep(1, p/2), rep(0, p/2))
+      beta2[nu_ind] <- c(rep(-1, p/2), rep(0, p/2))
       
       # Simulate data
       sim.data <- cause_hazards_sim(n = n, p = p, nblocks = 4, 
@@ -1157,7 +1163,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       
       x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
       
-      # Fit cause-specific cox model with glmnet on training set 
+      # Fit cause-specific cox model with glmnet on training set
       cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7, folds = nfolds)
       
       # Fit on validation set 
@@ -1176,7 +1182,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       mean((cc_min[nu_ind] - beta2[nu_ind])^2)
       ########################## Fit PenCR model ##################################
       penCR = cv.glmnet.CR(data = train, family="cox", alpha= 0.7, standardize= TRUE,
-                           nlambda = 20, t.BS = median(train$ftime), seed = 115, causeOfInt = 1,
+                           nlambda = 20, t.BS = median(train$ftime), seed = seed, causeOfInt = 1,
                            nfold = nfolds)
       
       cc_min_penCR1 <- penCR$glmnet.fits$models$`Cause 1`$glmnet.res$lambda[penCR$min.index[1]]
@@ -1217,8 +1223,11 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       # Case-base dataset
       cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
       
-      # Train case-base model 
-      cv.lambda <- mtool.multinom.cv(train, seed = 2023, nfold = nfolds)
+      # Train case-base model
+      start_cv <- Sys.time()
+      cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfolds)
+      end_cv <- Sys.time()
+      
       
       # Case-base fits 
       # Lambda.min
@@ -1243,8 +1252,9 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       
       ########################## Fit casebase model with post LASSO#################################
       
-      res <- multinom.post_enet_old(train, test, nfolds = nfolds)
-      
+      start_post <- Sys.time()
+      res <- multinom.post_enet_old(train, test, nfold = nfolds, seed = seed)
+      end_post <- Sys.time()
       
       # Calculate MSE for this as well (fill in here)
       mean((res$coefficients[nu_ind, 1]- beta1[nu_ind])^2)
@@ -1256,15 +1266,18 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       
       ########################## Fit casebase model with relaxed LASSO#################################
       
-      res <- multinom.relaxed_enet(train, nfold = nfolds, seed = 2023)
+      start_relaxed <- Sys.time()
+      res <- multinom.relaxed_enet(train, nfold = nfolds, seed = seed)
+      end_relaxed <- Sys.time()
+      print(res$lambda.min)
       
       model_final <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
                                       data = test,
                                       time = "ftime",
                                       lambda = res$lambda.min)
       
-      all_coef_names_cause1 =  paste("X", seq(1:20), ":1", sep ="")
-      all_coef_names_cause2 =  paste("X", seq(1:20), ":2", sep ="")
+      all_coef_names_cause1 =  paste("X", seq(1:p), ":1", sep ="")
+      all_coef_names_cause2 =  paste("X", seq(1:p), ":2", sep ="")
       
       exclude_coefs = c("(Intercept):1", "ftime:1",
                         "log(ftime):1", "(Intercept):2", "ftime:2",
@@ -1283,6 +1296,11 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
       res_cb_relaxed_lasso2 <- varsel_perc(est_betas_cause2, beta2)
       
       ###################################################################################
+      
+      print(paste(round(end_cv - start_cv, 3), " taken to run multinomial cv"))
+      print(paste(round(end_post - start_post, 3), " taken to run post LASSO"))
+      print(paste(round(end_relaxed - start_relaxed, 3), " taken to run relaxed LASSO"))
+      
       Res <- rbind(res_cb_relaxed_lasso1, res_cb_relaxed_lasso2, res_cb_post_lasso1, 
                    res_cb_post_lasso2, res_cb_min1, res_cb_min2, 
                    res_cox_min1, res_cox_min2, res_pencr_min1, res_pencr_min2, cen.prop)
@@ -1299,11 +1317,11 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
     
   Results <- do.call(rbind, Results)
   Results
-  },
-  
-  error = function(e) {
-    print(e)
-  })
+  # },
+  # 
+  # error = function(e) {
+  #   print(e)
+  # })
 }
 
 
@@ -1314,15 +1332,13 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5) {
 #' Formats resulting table from simulation of hazard function fits
 
 formatCaseBaseTable = function(sim_results) {
-  # sim_results = results_table
-  
   model_fit_labels = c("casebase.relaxed.lasso.lambda.min_cause1", "casebase.relaxed.lasso.lambda.min_cause2", 
                         "casebase.post.lasso.lambda.min_cause1", "casebase.post.lasso.lambda.min_cause2", 
                         "casebase.lambda.min_cause1", 
                         "casebase.lambda.min_cause2", "cox.lambda.min_cause1",
                         "cox.lambda.min_cause2", "pencr.lambda.mincause1", "pencr.lambda.mincause2", "cens.prop")
   
-  stat_names = colnames(as.data.frame(sim_results))
+  # stat_names = colnames(as.data.frame(sim_results))
   
   num_models = length(model_fit_labels)
   rows = nrow(sim_results)
@@ -1338,26 +1354,20 @@ formatCaseBaseTable = function(sim_results) {
   
   sim_results["Model"] = model_list
   
-  formatted_table = data.frame(matrix(nrow = 0, ncol = length(sim_results)))
-  col_names = colnames(as.data.frame(sim_results))
-  colnames(formatted_table) = col_names
+  stat_names = c("Model", "Sensitivity",	"Specificity",	"MCC",	"Coefficient_Bias")
+  
+  formatted_table = data.frame(matrix(nrow = 0, ncol = length(stat_names)))
+  colnames(formatted_table) = stat_names
+  stat_table = sim_results[stat_names]
   
   for (i in model_fit_labels) {
-    stat_table = sim_results[stat_names]
-    average_stat_row = colMeans((sim_results %>% filter(Model == i))[1:ncol(sim_results) - 1])
-    formatted_table = rbind(formatted_table, c(average_stat_row, i))
+    average_stat_row = colMeans((stat_table %>% filter(Model == i))[2:ncol(stat_table)])
+    formatted_table = rbind(formatted_table, c(i, average_stat_row))
   }
-  colnames(formatted_table) = col_names
+  colnames(formatted_table) = stat_names
   formatted_table = formatted_table %>% replace(is.na(.), NaN)
-  # formatted_table[, ncol(formatted_table) - 1] = lapply(formatted_table[, ncol(formatted_table) - 1], as.numeric)
-  
+
   options(digits = 5)
-  
-  # formatted_table[, ncol(formatted_table) - 1] = round_df(formatted_table[, ncol(formatted_table) - 1], 3)
-  
-  # Make model column the first column of df
-  formatted_table = formatted_table[,c(ncol(formatted_table), seq(1:ncol(formatted_table) - 1))]
-  formatted_table = formatted_table[1:ncol(formatted_table) - 1]
   
   return(formatted_table)
 }
