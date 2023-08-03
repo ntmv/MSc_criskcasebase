@@ -1,0 +1,267 @@
+---
+title: "Relaxed Lasso Multinomial LR Simulation"
+author: "Alexander Romanus"
+date: "`r Sys.Date()`"
+knit: (function(inputFile, encoding) { 
+      out_dir <- '/results/knits';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, paste(runif(1), 'relaxed_simulation.html'))) })
+output:
+  html_document: 
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(casebase)
+library(future.apply)
+library(glmnet)
+#library(mtool)
+library(parallelly)
+library(timereg)
+library(parallel)
+library(tictoc)
+library(tidyverse)
+#library(riskRegression)
+library(cmprsk)
+library(survsim)
+library(caret)
+library(Matrix)
+library(dplyr)
+
+# Helper functions 
+source("../src/helper_functions.R")
+source("../src/fitting_functions.R")
+```
+
+
+# Setup simulation
+``` {r setup-simulationecho=FALSE,echo=FALSE}
+p = 20
+n = 400
+nfolds = 5
+seed = 2023
+
+
+num_true <- p/2
+beta1 <- c(rep(0, p))
+beta2 <- c(rep(0, p))
+nu_ind <- seq(num_true)
+
+beta1[nu_ind] <- c(rep(1, p/2), rep(0, p/2))
+beta2[nu_ind] <- c(rep(-1, p/2), rep(0, p/2))
+
+# Simulate data
+sim.data <- cause_hazards_sim(n = n, p = p, nblocks = 4, 
+                              beta1 = beta1, beta2 = beta2, rate_cens = 0.25, 
+                              h1 = 0.55, h2 = 0.10, gamma1 = 1.5, gamma2 = 1.5)
+
+
+# Censoring proportion
+cen.prop <- c(prop.table(table(sim.data$fstatus)), 0, 0, 0, 0)
+
+# Training-test split 
+# We only do this (instead of generating datasets for train and test like Anthony mentioned because it is faster computationally 
+# as casebase resamples) + proportion of censoring can be quite random in each run of the simulation so we want to maintain the same in validation and test set
+train.index <- caret::createDataPartition(sim.data$fstatus, p = 0.75, list = FALSE)
+train <- sim.data[train.index,]
+test <- sim.data[-train.index,]
+```
+
+
+# Check final implementation
+
+## Cox model
+### Cause 1
+``` {r test-relaxed-lasso-final-cox-1,echo=FALSE}
+######################### Cause-1 #########################################
+  # Censor competing event
+  y_train <- Surv(time = train$ftime, event = train$fstatus == 1)
+  
+  x_train <- model.matrix(~ . -ftime -fstatus, data = train)[, -1] 
+  
+  # Censor competing event
+  y_test <- Surv(time = test$ftime, event = test$fstatus == 1)
+  
+  x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
+  
+  # Fit cause-specific cox model with glmnet on training set 
+  cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7, folds = nfolds)
+  
+  # Fit on validation set 
+  cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
+                        lambda = cox_mod$lambda.min)
+  
+  cc_min <- coef(cox_val_min)
+  
+  res_cox_min1 <- varsel_perc(cc_min, beta1)
+  
+  # let's calculate the bias for all the competitors as well (a task could be turning this one line into a function as well)
+  # Only for the true non-zero variables
+  mean((cc_min[nu_ind] - beta1[nu_ind])^2)
+  plot(cox_mod)
+```
+
+## Cox model
+### Cause 1        
+``` {r test-relaxed-lasso-final-cox-1, echo=FALSE}
+########################## Cause 2 #####################################
+# Censor competing event
+y_train <- Surv(time = train$ftime, event = train$fstatus == 2)
+
+x_train <- model.matrix(~ . -ftime -fstatus, data = train)[, -1] 
+
+# Censor competing event
+y_test <- Surv(time = test$ftime, event = test$fstatus == 2)
+
+x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
+
+# Fit cause-specific cox model with glmnet on training set
+cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7, folds = nfolds)
+
+# Fit on validation set 
+cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
+                      lambda = cox_mod$lambda.min)
+
+cc_min <- coef(cox_val_min)
+
+# Function to output variable selection performance metrics
+res_cox_min2 <- varsel_perc(cc_min, beta2)
+
+# let's calculate the bias for all the competitors as well (a task could be turning this one line into a function as well)
+cc_min_bias <- which(coef(cox_val_min) != 0)
+
+# MSE (bias)
+mean((cc_min[nu_ind] - beta2[nu_ind])^2)
+
+plot(cox_mod)
+```
+## Penalized cox model
+
+``` {r test-relaxed-lasso-final-penalized-cox, eval=FALSE, echo = FALSE}
+penCR = cv.glmnet.CR(data = train, family="cox", alpha= 0.7, standardize= TRUE,
+                           nlambda = 20, t.BS = median(train$ftime), seed = seed, causeOfInt = 1,
+                           nfold = nfolds)
+      
+cc_min_penCR1 <- penCR$glmnet.fits$models$`Cause 1`$glmnet.res$lambda[penCR$min.index[1]]
+cc_min_penCR2 <- penCR$glmnet.fits$models$`Cause 2`$glmnet.res$lambda[penCR$min.index[2]]
+
+# Fit on validation set
+penCR_val_min1 <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7,
+                         lambda = cc_min_penCR1)
+
+cc_min_penCR1 <- coef(penCR_val_min1)
+
+penCR_val_min2 <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7,
+                         lambda = cc_min_penCR2)
+
+
+cc_min_penCR2 <- coef(penCR_val_min2)
+
+res_pencr_min1 <- varsel_perc(cc_min_penCR1, beta1)
+res_pencr_min2 <- varsel_perc(cc_min_penCR2, beta2)
+
+# Free up memory for case-base
+rm(penCR)
+
+# Calculate MSE here as well (try and fill it out!)
+# MSE Cox model for cause of interest
+mean((cc_min_penCR1[nu_ind] - beta1[nu_ind])^2)
+# MSE Cox model for competing risk
+cc_min_bias_pen <- which(cc_min_penCR2 != 0)
+mean((cc_min_penCR2[nu_ind] - beta2[nu_ind])^2)
+
+plot(penCR$glmnet.fits)
+```
+
+## Casebase model fit with cv
+
+``` {r test-relaxed-lasso-final-casebase-cv,echo=FALSE}
+########################## Fit casebase model #################################
+# Test set 
+surv_obj_val <- with(test, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+
+# Covariance matrix
+cov_val <- cbind(test[, c(grepl("X", colnames(test)))], time = log(test$ftime))
+
+# Case-base dataset
+cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
+
+# Train case-base model
+cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfolds,
+                               initial_max_grid =  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005))
+# cv.lambda_unspecified_grid <- mtool.multinom.cv(train, seed = seed, nfold = nfolds)
+
+# Case-base fits
+# Lambda.min
+fit_val_min <- fit_cbmodel(cb_data_val, regularization = 'elastic-net',
+                           lambda = cv.lambda$lambda.min , alpha = 1, unpen_cov = 2)
+
+
+res_cb_min1 <- varsel_perc(fit_val_min$coefficients[1:p, 1], beta1)
+
+res_cb_min2 <- varsel_perc(fit_val_min$coefficients[1:p, 2], beta2)
+
+# Calculate MSE here as well!
+# MSE for casebase model for cause of interest
+fit_val_coef_1 <- fit_val_min$coefficients[1:p, 1]
+mean((beta1[nu_ind] - fit_val_coef_1[nu_ind])^2)
+
+# MSE for casebase model for competing risk
+fit_val_coef_2 <- fit_val_min$coefficients[1:p, 2]
+cb_min_bias <- which(fit_val_coef_2 != 0)
+mean((fit_val_coef_2[nu_ind] - beta2[nu_ind])^2)
+
+plot_cv.multinom(cv.lambda)
+# plot_cv.multinom(cv.lambda_unspecified_grid)
+```
+
+
+## Casebase model fit with POST Lasso
+
+``` {r test-relaxed-lasso-final-casebase-post-lasso,echo=FALSE}
+res_post <- multinom.post_enet_old(train, test, nfold = nfolds, seed = seed, initial_max_grid =  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005))
+
+# Calculate MSE for this as well (fill in here)
+mean((res_post$coefficients[nu_ind, 1]- beta1[nu_ind])^2)
+mean((res_post$coefficients[nu_ind, 2] - beta2[nu_ind])^2)
+
+res_post_cb_post_lasso1 <- varsel_perc(res_post$coefficients[nu_ind, 1], beta1)
+res_post_cb_post_lasso2 <- varsel_perc(res_post$coefficients[nu_ind, 2], beta2)
+
+plot_post_relaxed.multinom(res_post)
+```
+
+## Casebase model fit with Relaxed Lasso
+``` {r test-relaxed-lasso-final-casebase-relaxed-lasso,echo=FALSE}
+########################## Fit casebase model with relaxed LASSO#################################
+res_relaxed <- multinom.relaxed_enet(train, nfold = nfolds, seed = seed, initial_max_grid =  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005))
+print(res_relaxed$lambda.min)
+
+model_final <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+                                data = test,
+                                time = "ftime",
+                                lambda = res_relaxed$lambda.min)
+
+all_coef_names_cause1 =  paste("X", seq(1:p), ":1", sep ="")
+all_coef_names_cause2 =  paste("X", seq(1:p), ":2", sep ="")
+
+exclude_coefs = c("(Intercept):1", "ftime:1",
+                  "log(ftime):1", "(Intercept):2", "ftime:2",
+                  "log(ftime):2")
+
+est_betas = coef(model_final)[!(names(coef(model_final)) %in% exclude_coefs)]
+est_betas_cause1 = est_betas[names(est_betas) %in% all_coef_names_cause1]
+est_betas_cause2 = est_betas[names(est_betas) %in% all_coef_names_cause2]
+
+
+# Calculate MSE for this as well (fill in here)
+mean((est_betas_cause1 - beta1[nu_ind])^2)
+mean((est_betas_cause2 - beta2[nu_ind])^2)
+
+res_relaxed_cb_relaxed_lasso1 <- varsel_perc(est_betas_cause1, beta1)
+res_relaxed_cb_relaxed_lasso2 <- varsel_perc(est_betas_cause2, beta2)
+
+plot_post_relaxed.multinom(res_relaxed)
+```
