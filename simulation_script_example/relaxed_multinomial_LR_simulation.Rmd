@@ -218,21 +218,6 @@ plot_cv.multinom(cv.lambda)
 ```
 
 
-## Casebase model fit with POST Lasso
-
-``` {r test-relaxed-lasso-final-casebase-post-lasso,echo=FALSE}
-res_post <- multinom.post_enet_old(train, test, nfold = nfolds, seed = seed, initial_max_grid =  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005))
-
-# Calculate MSE for this as well (fill in here)
-mean((res_post$coefficients[nu_ind, 1]- beta1[nu_ind])^2)
-mean((res_post$coefficients[nu_ind, 2] - beta2[nu_ind])^2)
-
-res_post_cb_post_lasso1 <- varsel_perc(res_post$coefficients[nu_ind, 1], beta1)
-res_post_cb_post_lasso2 <- varsel_perc(res_post$coefficients[nu_ind, 2], beta2)
-
-plot_post_relaxed.multinom(res_post)
-```
-
 ## Casebase model fit with Relaxed Lasso
 ``` {r test-relaxed-lasso-final-casebase-relaxed-lasso,echo=FALSE}
 ########################## Fit casebase model with relaxed LASSO#################################
