@@ -919,56 +919,22 @@ plot_myRelaxed = function(relaxed_object) {
 
 ###########################################################
 #' relaxed LASSO function for mtool 
-multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                                   constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                                   ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
   # FOR TESTING
   # regularization = 'elastic-net'; lambda_max = NULL; alpha = 1; nfold = 10;
   # constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE;
   # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l = 1;
+  print("RELAXED")
   p = ncol(train) - 2
-  surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-  cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
-  # Create case-base dataset
-  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
-  # Default lambda grid
-  if(is.null(lambda_max)) {
-    # Lambda max grid for bisection search 
-    if(is.null(initial_max_grid)) {
-      initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
-      fit_val_max <- mclapply(initial_max_grid, 
-                              function(lambda_val) {
-                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                            lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
-      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
-      if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
-        warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
-      }
-      upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
-      lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
-      new_max_searchgrid <- seq(lower, upper, precision)
-      fit_val_max <-  mclapply(new_max_searchgrid, 
-                               function(lambda_val) {
-                                 fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha,
-                                             unpen_cov = constant_covariates)}, mc.cores = ncores, mc.set.seed = seed)
-      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
-      lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
-      print("INITIAL MAX GRID IS NULL")
-    }
-    print("LAMBDA MAX IS NULL")
-    print(lambda_max)
-  }
+  
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
-  cb_data_train <- as.data.frame(cb_data_train)
-  
-  #TODO: Figure out how to incorporate time variable into cross-validation properly
-  time_var <- cb_data_train %>% select(time)
-  cb_data_train <- cb_data_train %>%
-    select(-time)
-  
+  print(lambdagrid)
+
+
   # Create folds 
-  folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
+  folds <- caret::createFolds(factor(Y), k = nfold, list = FALSE)
   lambda.min <- rep(NA_real_, nfold)
   all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   non_zero_coefs_matrix <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
@@ -981,88 +947,85 @@ multinom.relaxed_enet <- function(train, regularization = 'elastic-net', lambda_
   #Perform 10 fold cross validation
   for(i in 1:nfold){
     #Segment your data by fold using the which() function 
-    train_cv <- cb_data_train[which(folds != i), ] #Set the training set
-    test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
-    time_train = time_var[which(folds != i), ]
-    time_test = time_var[which(folds == i), ]
-    # Create X and Y
-    train_cv_list <- list("time" = train_cv$time,
-                        "event_ind" = train_cv$event_ind,
-                        "covariates" = train_cv[, grepl("covariates", names(train_cv))],
-                        "offset" = train_cv$offset)
+    X_train <- as.matrix(X[which(folds != i), ]) #Set the training set
+    X_val <- as.matrix(X[which(folds == i), ]) #Set the validation set
+    Y_train <- as.numeric(Y[which(folds != i)]) - 1 #Set the training set
+    Y_val <- as.numeric(Y[which(folds == i)]) - 1 #Set the validation set
+
     # Standardize
-    train_cv_list$covariates <- as.data.frame(scale(train_cv_list$covariates, center = T, scale = T))
+    X_train <- scale(X_train, center = T, scale = T)
+    X_val <- scale(X_val, center = T, scale = T)
     
-    all_deviances[, i] <- unlist(mclapply(lambdagrid, 
-                        function(lambda_val) {
-                          model <- fit_cbmodel(train_cv_list, regularization = 'elastic-net',
-                                      lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
+    
+    all_deviances[, i] <- unlist(mclapply(lambdagrid,
+                        function(lambda_v) {
+                          lambda1 <- lambda_v*alpha
+                          lambda2 <- 0.5*lambda_v*(1 - alpha)
+                          # mtool
+                          fit.mtool.parameterized <- mtool::mtool.MNlogistic(
+                            X = X_train,
+                            Y = Y_train, # I coded Y to start from 0, Y in (0,1,2) in your example
+                            offset = rep(0, length(Y_train)),
+                            N_covariates = 0,
+                            regularization = 'elastic-net',
+                            transpose = FALSE,
+                            lambda1 = lambda1, lambda2 = lambda2,
+                            lambda3 = 0
+                          )
+                          coefs_cause1 = fit.mtool.parameterized$coefficients[, 1]
+                          coefs_cause2 = fit.mtool.parameterized$coefficients[, 2]
                           
-                          selected_cause1 <- which(model$coefficients[1:(p + 1), 1] != 0)
-                          if((p + 1) %in% selected_cause1) {
-                            selected_cause1 = c(selected_cause1[1:length(selected_cause1) - 1], "covariates.time")
-                          }
-                          selected_cause2 <- which(model$coefficients[1:(p + 1), 2] != 0)
-                          if((p + 1) %in% selected_cause2) {
-                            selected_cause2 = c(selected_cause2[1:length(selected_cause2) - 1], "covariates.time")
-                          }
                           
-                          non_zero_coefs <- union(selected_cause1, selected_cause2)
+                          selected_cause1 <- which(coefs_cause1 != 0)
+                          selected_cause2 <- which(coefs_cause2 != 0)
                           
-                          non_zero_coefs[non_zero_coefs != "covariates.time"] <- 
-                            paste("covariates.X", non_zero_coefs[non_zero_coefs != "covariates.time"], sep = "")
+                          # Maybe try just using first cause 1
+                          non_zero_coef_names <- paste("x", as.character(sort(union(selected_cause1, selected_cause2))), 
+                                                       sep = "")
                           
-                          non_zero_coefs_no_time = non_zero_coefs[non_zero_coefs != "covariates.time"]
-
-                          trainnew <- cbind(train_cv[, c(colnames(train_cv) %in% non_zero_coefs_no_time)],
-                                            ftime = (time_train), train_cv["event_ind"])
-
-                          model_cb <- fitSmoothHazard(event_ind ~. +log(ftime) -event_ind,
-                                                      data = trainnew,
-                                                      time = "ftime")
+                          X_train_new <- X_train[, colnames(X_train) %in% non_zero_coef_names]
+                          X_val_new <- X_val[, colnames(X_train) %in% non_zero_coef_names]
+                    
                           
-                          cause1_subset = as.logical(lapply(names(coef(model_cb)), grepl, pattern = ":1", fixed=TRUE))
-                          cause2_subset = as.logical(lapply(names(coef(model_cb)), grepl, pattern = ":2", fixed=TRUE))
-                          coefs = cbind(coef(model_cb)[cause1_subset], coef(model_cb)[cause2_subset])
-                          # Get rid of log time coefficient, reshuffle rows so last two rows are time coefficient estimates then intercept
-                          coefs = coefs[1:nrow(coefs) - 1, ]
-                          coefs = rbind(coefs[2:nrow(coefs), ], coefs[1, ])
-
-                          testnew <- list("time" = time_test,
-                                          "event_ind" = test_cv$event_ind,
-                                          "covariates" = test_cv[, c(colnames(test_cv) %in% non_zero_coefs)],
-                                          "offset" = test_cv$offset)
+                          fit.mtool.subset <- mtool::mtool.MNlogistic(
+                            X = X_train_new,
+                            Y = Y_train, # I coded Y to start from 0, Y in (0,1,2) in your example
+                            offset = rep(0, length(Y_train)),
+                            N_covariates = 0,
+                            regularization = 'l1l2',
+                            transpose = FALSE,
+                            lambda1 = 0
+                          )
                           
-                          multi_deviance_fsh(cb_data = testnew, coefs = coefs)
-                        }, mc.cores = ncores, mc.set.seed = seed))
+                          multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)
+                          #
+                          # paste(as.character(fit.mtool.parameterized$no_non_zero), as.character(
+                          #   multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)))
+                        },
+    mc.cores = ncores, mc.set.seed = seed))
     cat("Completed Fold", i, "\n")
   }
 
   mean_dev <- rowMeans(all_deviances)
   lambda.min <- lambdagrid[which.min(mean_dev)]
-  # sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
-  # 
-  # if (sel_lambda_min  == 2*constant_covariates) {
-  #   cat("Null model chosen: choosing first non-null model lambda")
-  #   lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
-  # }
+
   
   cv_se <- sqrt(var(mean_dev))
   rownames(all_deviances) <- lambdagrid
-  # rownames(non_zero_coefs) <- lambdagrid
   return(list(lambda.min = lambda.min, non_zero_coefs = non_zero_coefs, lambdagrid = lambdagrid, 
               cv_se = cv_se, deviance_grid = all_deviances))
 }
 
 ###########################################################
 #' Calculate multinomial deviance on fitSmoothHazard object
-multi_deviance_fsh <- function(cb_data, coefs) {
-  X <- as.matrix(cbind(cb_data$covariates, 1))
+multi_deviance_fsh <- function(covs, response, coefs) {
+  # X <- as.matrix(cbind(covs, 1))
+  X <- covs
   fitted_vals <- as.matrix(X %*% coefs)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
                                    inverse = TRUE)
   # Turn event_ind into Y_mat
-  Y_fct <- factor(cb_data$event_ind)
+  Y_fct <- factor(response)
   Y_levels <- levels(Y_fct)
   Y_mat <- matrix(NA_integer_, ncol = length(Y_levels),
                   nrow = nrow(X))
@@ -1225,7 +1188,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5, seed) {
       
       # Train case-base model
       start_cv <- Sys.time()
-      cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfolds)
+      cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfolds, lambda_max =  0.9, alpha = 0.7)
       end_cv <- Sys.time()
       
       
@@ -1253,7 +1216,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5, seed) {
       ########################## Fit casebase model with post LASSO#################################
       
       start_post <- Sys.time()
-      res <- multinom.post_enet_old(train, test, nfold = nfolds, seed = seed)
+      res <- multinom.post_enet_old(train, test, nfold = nfolds, seed = seed, lambda_max =  0.9, alpha = 0.7)
       end_post <- Sys.time()
       
       # Calculate MSE for this as well (fill in here)
@@ -1267,7 +1230,7 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5, seed) {
       ########################## Fit casebase model with relaxed LASSO#################################
       
       start_relaxed <- Sys.time()
-      res <- multinom.relaxed_enet(train, nfold = nfolds, seed = seed)
+      res <- multinom.relaxed_enet(train, nfold = nfolds, seed = seed, lambda_max =  0.9, alpha = 0.7)
       end_relaxed <- Sys.time()
       print(res$lambda.min)
       
@@ -1326,6 +1289,20 @@ runCasebaseSim = function(n = 400, p = 20, N = 5, nfolds = 5, seed) {
 
 
 
+plot_post_relaxed.multinom <- function(cv_object) {
+  nfold <- ncol(cv_object$deviance_grid)
+  mean_dev <- rowMeans(cv_object$deviance_grid)
+  row_stdev <- apply(cv_object$deviance_grid, 1, function(x) {sd(x)/sqrt(nfold)})
+  plot.dat <- data.frame(lambdagrid = cv_object$lambdagrid, mean.dev = mean_dev, 
+                         upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
+  p <- ggplot(plot.dat, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() + 
+    geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, position=position_dodge(0.05), colour = "grey") + 
+    labs(x = "log(lambda)", y = "Multinomial Deviance")  + 
+    geom_vline(xintercept = log(cv_object$lambda.min), linetype = "dotted", colour = "blue")
+  return(p)
+}
+
+
 
 
 ###########################################################
@@ -1371,11 +1348,5 @@ formatCaseBaseTable = function(sim_results) {
   
   return(formatted_table)
 }
-
-
-
-
-
-
 
 

@@ -1,0 +1,221 @@
+---
+title: "Relaxed Lasso multinomial LR simulation with multinomial data"
+author: "Alexander Romanus"
+date: "`r Sys.Date()`"
+knit: (function(inputFile, encoding) { 
+      out_dir <- 'results/knits';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, paste(runif(1), 'relaxed_simulation_multinomial.html'))) })
+output:
+  html_document: 
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(casebase)
+library(future.apply)
+library(glmnet)
+#library(mtool)
+library(parallelly)
+library(timereg)
+library(parallel)
+library(tictoc)
+library(tidyverse)
+#library(riskRegression)
+library(cmprsk)
+library(survsim)
+library(caret)
+library(Matrix)
+library(dplyr)
+
+
+# Helper functions 
+source("../src/helper_functions.R")
+source("../src/fitting_functions.R")
+```
+
+
+# Setup n > p (n = 500)
+``` {r setup-simulation,echo=FALSE}
+p = 20
+n = 400
+nfolds = 5
+seed = 2023
+
+# Generate covariates 
+X <- matrix(rnorm(n * p), n, p)
+
+# coefficients for each choice
+X1 <- rep(0, p)
+X2 <- c(rep(3, p/2), rep(0, p/2))
+zero_X2 <- which(X2 == 0)
+
+X3 <- c(rep(-3, p/2), rep(0, p/2))
+zero_X3 <- which(X3 == 0)
+
+
+# vector of probabilities
+vProb = cbind(exp(X%*%X1), exp(X%*%X2), exp(X%*%X3))
+
+# multinomial draws
+mChoices <- t(apply(vProb, 1, rmultinom, n = 1, size = 1))
+dfM <- cbind.data.frame(y = apply(mChoices, 1, function(x) which(x == 1)), X)
+# Rename covariates 
+colnames(dfM)[2:(p+1)] <- paste0('x', 1:p)
+
+# 0, 1, 2 for levels 
+Y <- factor(dfM$y-1)
+
+# Covariate matrix 
+X <- as.matrix(dfM[, c(2:(p+1))])
+
+# Rename covariates 
+colnames(X) <- paste0('x', 1:p)
+```
+
+
+# Check final implementation
+
+## Cox model
+### Cause 1
+``` {r test-relaxed-lasso-final-cox-1,echo=FALSE}
+list = paste0('x', 1:p)
+formula = ""
+for (i in list) {
+    formula = paste(formula, i, "+")
+}
+formula = as.formula(paste("y ~", substr(formula, 2, str_length(formula) - 2), "- 1"))
+
+alpha <- 0
+lambda <- 0.1
+lambda1 <- lambda*alpha
+lambda2 <- 0.5*lambda*(1 - alpha)
+
+# glmnet relax = TRUE
+set.seed(seed)
+fit.glmnet.relaxed <- glmnet::cv.glmnet(
+  x = X, y = Y,
+  family = "multinomial",
+  intercept = FALSE,
+  type.multinomial = "grouped",  # same sparsity pattern for all outcome classes
+  alpha = 0.5, relax = TRUE, gamma = 0, nfolds = 10)
+# Elastic-net reparametrization
+# mtool
+glmnet_lambda_max = fit.glmnet.relaxed$lambda[1]
+fit.mtool.relaxed <- multinom.relaxed_enet(X = X, y = Y, lambda_max = glmnet_lambda_max, alpha = 0.5, seed = seed)
+```
+
+## Cox model
+### Cause 2        
+``` {r test-relaxed-lasso-final-cox-2, echo=FALSE}
+########################## Cause 2 #####################################
+# Censor competing event
+y_train <- Surv(time = train$ftime, event = train$fstatus == 2)
+
+x_train <- model.matrix(~ . -ftime -fstatus, data = train)[, -1] 
+
+# Censor competing event
+y_test <- Surv(time = test$ftime, event = test$fstatus == 2)
+
+x_test <- model.matrix(~ . -ftime -fstatus, data = test)[, -1] 
+
+# Fit cause-specific cox model with glmnet on training set
+cox_mod <- cv.glmnet(x = x_train, y = y_train, family = "cox", alpha = 0.7, folds = nfolds)
+
+# Fit on validation set 
+cox_val_min <- glmnet(x = x_test, y = y_test, family = "cox", alpha = 0.7, 
+                      lambda = cox_mod$lambda.min)
+
+cc_min <- coef(cox_val_min)
+
+# Function to output variable selection performance metrics
+res_cox_min2 <- varsel_perc(cc_min, beta2)
+
+# let's calculate the bias for all the competitors as well (a task could be turning this one line into a function as well)
+cc_min_bias <- which(coef(cox_val_min) != 0)
+
+# MSE (bias)
+mean((cc_min[nu_ind] - beta2[nu_ind])^2)
+
+plot(cox_mod)
+print(cox_mod$glmnet.fit$bet[, cox_mod$index[1]])
+```
+
+## Casebase model fit with cv
+
+``` {r test-relaxed-lasso-final-casebase-cv,echo=FALSE}
+########################## Fit casebase model #################################
+# Test set 
+surv_obj_val <- with(test, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+
+# Covariance matrix
+cov_val <- cbind(test[, c(grepl("X", colnames(test)))], time = log(test$ftime))
+
+# Case-base dataset
+cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
+
+# Train case-base model
+cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfolds,
+                               alpha = 0.7, lambda_max = 0.9)
+
+# Case-base fits
+# Lambda.min
+# fit_val_min <- fit_cbmodel(cb_data_val, regularization = 'elastic-net',
+#                            lambda = cv.lambda$lambda.min , alpha = 1, unpen_cov = 2)
+# 
+# 
+# res_cb_min1 <- varsel_perc(fit_val_min$coefficients[1:p, 1], beta1)
+# 
+# res_cb_min2 <- varsel_perc(fit_val_min$coefficients[1:p, 2], beta2)
+# 
+# # Calculate MSE here as well!
+# # MSE for casebase model for cause of interest
+# fit_val_coef_1 <- fit_val_min$coefficients[1:p, 1]
+# mean((beta1[nu_ind] - fit_val_coef_1[nu_ind])^2)
+# 
+# # MSE for casebase model for competing risk
+# fit_val_coef_2 <- fit_val_min$coefficients[1:p, 2]
+# cb_min_bias <- which(fit_val_coef_2 != 0)
+# mean((fit_val_coef_2[nu_ind] - beta2[nu_ind])^2)
+
+plot_cv.multinom(cv.lambda)
+# print(t(as.list(cv.lambda$coefficients[which(cv.lambda$lambdagrid %in% cv.lambda$lambda.min), -1])))
+```
+
+
+## Casebase model fit with Relaxed Lasso
+``` {r test-relaxed-lasso-final-casebase-relaxed-lasso,echo=FALSE}
+########################## Fit casebase model with relaxed LASSO#################################
+res_relaxed <- multinom.relaxed_enet(train, nfold = nfolds, seed = seed,
+                               alpha = 0.7, lambda_max = 0.9)
+print(res_relaxed$lambda.min)
+
+# model_final <- fitSmoothHazard(fstatus ~. +log(ftime) -fstatus,
+#                                 data = test,
+#                                 time = "ftime",
+#                                 lambda = res_relaxed$lambda.min)
+# 
+# all_coef_names_cause1 =  paste("X", seq(1:p), ":1", sep ="")
+# all_coef_names_cause2 =  paste("X", seq(1:p), ":2", sep ="")
+# 
+# exclude_coefs = c("(Intercept):1", "ftime:1",
+#                   "log(ftime):1", "(Intercept):2", "ftime:2",
+#                   "log(ftime):2")
+# 
+# est_betas = coef(model_final)[!(names(coef(model_final)) %in% exclude_coefs)]
+# est_betas_cause1 = est_betas[names(est_betas) %in% all_coef_names_cause1]
+# est_betas_cause2 = est_betas[names(est_betas) %in% all_coef_names_cause2]
+# 
+# 
+# # Calculate MSE for this as well (fill in here)
+# mean((est_betas_cause1 - beta1[nu_ind])^2)
+# mean((est_betas_cause2 - beta2[nu_ind])^2)
+# 
+# res_relaxed_cb_relaxed_lasso1 <- varsel_perc(est_betas_cause1, beta1)
+# res_relaxed_cb_relaxed_lasso2 <- varsel_perc(est_betas_cause2, beta2)
+
+plot_post_relaxed.multinom(res_relaxed)
+# print(t(as.list(cv.lambda$coefficients[which(cv.lambda$lambdagrid %in% cv.lambda$lambda.min), -1])))
+```
