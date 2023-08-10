@@ -52,7 +52,7 @@ X1 <- rep(0, p)
 X2 <- c(rep(3, p/2), rep(0, p/2))
 zero_X2 <- which(X2 == 0)
 
-X3 <- c(rep(-3, p/2), rep(0, p/2))
+X3 <- c(rep(3, p/2), rep(0, p/2))
 zero_X3 <- which(X3 == 0)
 
 
@@ -98,13 +98,17 @@ set.seed(seed)
 fit.glmnet.relaxed <- glmnet::cv.glmnet(
   x = X, y = Y,
   family = "multinomial",
-  intercept = FALSE,
+  intercept = TRUE,
   type.multinomial = "grouped",  # same sparsity pattern for all outcome classes
-  alpha = 0.5, relax = TRUE, gamma = 0, nfolds = 10)
+  alpha = 0.7, nfolds = 10,
+  relax = TRUE, gamma = 0)
 # Elastic-net reparametrization
 # mtool
 glmnet_lambda_max = fit.glmnet.relaxed$lambda[1]
-fit.mtool.relaxed <- multinom.relaxed_enet(X = X, y = Y, lambda_max = glmnet_lambda_max, alpha = 0.5, seed = seed)
+fit.mtool.relaxed <- multinom.relaxed_enet(X = X, y = Y, lambda_max = glmnet_lambda_max, alpha = 0.7, seed = seed, epsilon = 0.1)
+
+plot(fit.glmnet.relaxed)
+plot_post_relaxed.multinom(fit.mtool.relaxed)
 ```
 
 ## Cox model

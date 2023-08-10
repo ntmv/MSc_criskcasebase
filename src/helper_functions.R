@@ -934,7 +934,7 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
 
 
   # Create folds 
-  folds <- caret::createFolds(factor(Y), k = nfold, list = FALSE)
+  folds <- caret::createFolds(y = Y, k = nfold, list = FALSE)
   lambda.min <- rep(NA_real_, nfold)
   all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   non_zero_coefs_matrix <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
@@ -956,22 +956,18 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
     X_train <- scale(X_train, center = T, scale = T)
     X_val <- scale(X_val, center = T, scale = T)
     
+    cb_data_train = list("event_ind" = Y_train,
+                         "covariates" = X_train,
+                         "offset" = rep(0, length(Y_train)))
+    
     
     all_deviances[, i] <- unlist(mclapply(lambdagrid,
                         function(lambda_v) {
-                          lambda1 <- lambda_v*alpha
-                          lambda2 <- 0.5*lambda_v*(1 - alpha)
+                          # lambda1 <- lambda_v*alpha
+                          # lambda2 <- 0.5*lambda_v*(1 - alpha)
                           # mtool
-                          fit.mtool.parameterized <- mtool::mtool.MNlogistic(
-                            X = X_train,
-                            Y = Y_train, # I coded Y to start from 0, Y in (0,1,2) in your example
-                            offset = rep(0, length(Y_train)),
-                            N_covariates = 0,
-                            regularization = 'elastic-net',
-                            transpose = FALSE,
-                            lambda1 = lambda1, lambda2 = lambda2,
-                            lambda3 = 0
-                          )
+                          fit.mtool.parameterized <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                                                 lambda = lambda_v, alpha = alpha, unpen_cov = 1)
                           coefs_cause1 = fit.mtool.parameterized$coefficients[, 1]
                           coefs_cause2 = fit.mtool.parameterized$coefficients[, 2]
                           
@@ -987,20 +983,15 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
                           X_val_new <- X_val[, colnames(X_train) %in% non_zero_coef_names]
                     
                           
-                          fit.mtool.subset <- mtool::mtool.MNlogistic(
-                            X = X_train_new,
-                            Y = Y_train, # I coded Y to start from 0, Y in (0,1,2) in your example
-                            offset = rep(0, length(Y_train)),
-                            N_covariates = 0,
-                            regularization = 'l1l2',
-                            transpose = FALSE,
-                            lambda1 = 0
-                          )
+                          cb_data_train_new <- list("event_ind" = Y_train,
+                                                    "covariates" = X_train_new,
+                                                    "offset" = rep(0, length(Y_train)))
+                          
+                          
+                          fit.mtool.subset <- fit_cbmodel(cb_data_train_new, regularization = 'elastic-net',
+                                                                 lambda = 0.000001, alpha = alpha, unpen_cov = 1)
                           
                           multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)
-                          #
-                          # paste(as.character(fit.mtool.parameterized$no_non_zero), as.character(
-                          #   multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)))
                         },
     mc.cores = ncores, mc.set.seed = seed))
     cat("Completed Fold", i, "\n")
@@ -1019,8 +1010,8 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
 ###########################################################
 #' Calculate multinomial deviance on fitSmoothHazard object
 multi_deviance_fsh <- function(covs, response, coefs) {
-  # X <- as.matrix(cbind(covs, 1))
-  X <- covs
+  # X <- covs
+  X <- as.matrix(cbind(covs, 1))
   fitted_vals <- as.matrix(X %*% coefs)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
                                    inverse = TRUE)
