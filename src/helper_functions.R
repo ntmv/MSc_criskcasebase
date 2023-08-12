@@ -482,7 +482,7 @@ plot_myRelaxed = function(relaxed_object) {
 
 ###########################################################
 #' relaxed LASSO function for mtool 
-multinom.relaxed_enet_test <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                                   constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                                   ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
   # FOR TESTING
@@ -531,7 +531,7 @@ multinom.relaxed_enet_test <- function(X, Y, regularization = 'elastic-net', lam
                          "offset" = rep(0, length(Y_train)))
     
     
-    res <- unlist(mclapply(lambdagrid,
+    all_deviances[, i] <- unlist(mclapply(lambdagrid,
               function(lambda_v) {
                 fit.mtool.parameterized <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
                                                        lambda = lambda_v, alpha = alpha, unpen_cov = 1)
@@ -559,31 +559,12 @@ multinom.relaxed_enet_test <- function(X, Y, regularization = 'elastic-net', lam
                 
                 fit.mtool.subset <- fit_cbmodel(cb_data_train_new, regularization = 'elastic-net',
                                                        lambda = 0.000001, alpha = alpha, unpen_cov = 1)
-                
-                
-                if(i == nfold) {
-                  fit.all.data = fit_cbmodel(cb_data_all, regularization = 'elastic-net',
-                                                   lambda = lambda_v, alpha = alpha, unpen_cov = 1)
-                  non_zero_coefs = length(union(which(fit.all.data$coefficients[, 1] != 0), 
-                                                  which(fit.all.data$coefficients[, 2] != 0)))
-                  list(length(non_zero_coefs), 
-                       multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients))
-                  
-                } else {
-                  multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)
-                }
+
+                multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients, add_intercept = TRUE)
               },
     mc.cores = ncores, mc.set.seed = seed))
-    if(i == nfold) {
-      all_deviances[, i] = res[seq(2, 200, by = 2)]
-    } else {
-      all_deviances[, i] = res
-    }
     cat("Completed Fold", i, "\n")
   }
-  all_non_coefs[, nfold] = res[seq(1, 200, by = 2)]
-  
-
   mean_dev <- rowMeans(all_deviances)
   lambda.min <- lambdagrid[which.min(mean_dev)]
 
@@ -596,12 +577,9 @@ multinom.relaxed_enet_test <- function(X, Y, regularization = 'elastic-net', lam
 
 
 
-
-
-
 ###########################################################
 #' relaxed LASSO function for mtool 
-multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+multinom.relaxed_enet_nnet <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                                   constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                                   ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
   # FOR TESTING
@@ -667,16 +645,14 @@ multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_m
                   all_zeros = length(non_zero_coef_names) == 1
                   
                   if (all_zeros){
-                    print("ALL ZEROS")
                     # If no predictors selected, skip OLS with cross validation and continue with next lambda
                     X_train_new <- as.matrix(rep(1, nrow(X_train)))
                     X_val_new <- as.matrix(rep(1, nrow(X_val)))
                     
                     coef = t(as.matrix(fit.mtool.parameterized$coefficients[nrow(fit.mtool.parameterized$coefficients), ]))
-                    dev = multi_deviance_fsh(X = X_val_new, response = Y_val, coefs = coef)
+                    dev = multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = coef, add_intercept = FALSE)
                     
                   } else {
-                    print("NON ZEROS")
                     X_train_new <- X_train[, colnames(X_train) %in% non_zero_coef_names]
                     X_val_new <- cbind(X_val[, colnames(X_val) %in% non_zero_coef_names], 1)
                     
@@ -700,7 +676,7 @@ multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_m
                     coef_subset = rbind(t(coef(fit.subset))[2:(p_new + 1), ],
                                         t(coef(fit.subset))[1, ])
                     
-                    dev = multi_deviance_fsh(X = X_val_new, response = Y_val, coefs = coef_subset)
+                    dev = multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = coef_subset, add_intercept = FALSE)
                   }
                   
                   dev
@@ -708,6 +684,7 @@ multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_m
                 mc.cores = ncores, mc.set.seed = seed))
     cat("Completed Fold", i, "\n")
   }
+  print(all_deviances)
   
   mean_dev <- rowMeans(all_deviances)
   lambda.min <- lambdagrid[which.min(mean_dev)]
@@ -719,9 +696,135 @@ multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_m
               cv_se = cv_se, deviance_grid = all_deviances))
 }
 
+
+
+###########################################################
+#' relaxed LASSO function for mtool 
+multinom.relaxed_enet_coefs_each_lambda <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+                                                    constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
+                                                    ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
+  # FOR TESTING
+  # regularization = 'elastic-net'; lambda_max = NULL; alpha = 0.7; nfold = 10;
+  # constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE;
+  # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l = 1;
+  print("RELAXED")
+  p = ncol(train) - 2
+  
+  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  print(lambdagrid)
+  
+  
+  # Create folds 
+  folds <- caret::createFolds(y = Y, k = nfold, list = FALSE)
+  lambda.min <- rep(NA_real_, nfold)
+  all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  non_zero_coefs_matrix <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  lowest_deviance = .Machine$double.xmax
+  
+  all_non_coefs <- c()
+  
+  
+  current_deviance = .Machine$double.xmax
+  best_fit = NULL
+  min_lambda_index = 0
+  
+  cb_data_all = list("event_ind" = Y,
+                     "covariates" = X,
+                     "offset" = rep(0, length(Y)))
+  
+  #Perform 10 fold cross validation
+  for(i in 1:nfold){
+    #Segment your data by fold using the which() function 
+    X_train <- as.matrix(X[which(folds != i), ]) #Set the training set
+    X_val <- as.matrix(X[which(folds == i), ]) #Set the validation set
+    Y_train <- as.numeric(Y[which(folds != i)]) - 1 #Set the training set
+    Y_val <- as.numeric(Y[which(folds == i)]) - 1 #Set the validation set
+    
+    # Standardize
+    X_train <- scale(X_train, center = T, scale = T)
+    X_val <- scale(X_val, center = T, scale = T)
+    
+    cb_data_train = list("event_ind" = Y_train,
+                         "covariates" = X_train,
+                         "offset" = rep(0, length(Y_train)))
+    
+    
+    res <- unlist(mclapply(lambdagrid,
+                           function(lambda_v) {
+                             fit.mtool.parameterized <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                                                    lambda = lambda_v, alpha = alpha, unpen_cov = 1)
+                             coefs_cause1 = fit.mtool.parameterized$coefficients[, 1]
+                             coefs_cause2 = fit.mtool.parameterized$coefficients[, 2]
+                             
+                             
+                             selected_cause1 <- which(coefs_cause1 != 0)
+                             selected_cause2 <- which(coefs_cause2 != 0)
+                             non_zero_coef_namesunion(selected_cause1, selected_cause2)
+                             
+                             # Maybe try just using first cause 1
+                             non_zero_coef_names <- paste("x", as.character(sort(union(selected_cause1, selected_cause2))), 
+                                                          sep = "")
+                             
+                             
+                             X_train_new <- X_train[, colnames(X_train) %in% non_zero_coef_names]
+                             X_val_new <- X_val[, colnames(X_train) %in% non_zero_coef_names]
+                             
+                             
+                             cb_data_train_new <- list("event_ind" = Y_train,
+                                                       "covariates" = X_train_new,
+                                                       "offset" = rep(0, length(Y_train)))
+                             
+                             
+                             fit.mtool.subset <- fit_cbmodel(cb_data_train_new, regularization = 'elastic-net',
+                                                             lambda = 0.000001, alpha = alpha, unpen_cov = 1)
+                             
+                             
+                             if(i == nfold) {
+                               fit.all.data = fit_cbmodel(cb_data_all, regularization = 'elastic-net',
+                                                          lambda = lambda_v, alpha = alpha, unpen_cov = 1)
+                               non_zero_coefs = length(union(which(fit.all.data$coefficients[, 1] != 0), 
+                                                             which(fit.all.data$coefficients[, 2] != 0)))
+                               list(length(non_zero_coefs), 
+                                    multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients), add_intercept = TRUE)
+                               
+                             } else {
+                               multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients, add_intercept = TRUE)
+                             }
+                           },
+                           mc.cores = ncores, mc.set.seed = seed))
+    if(i == nfold) {
+      all_deviances[, i] = res[seq(2, 200, by = 2)]
+    } else {
+      all_deviances[, i] = res
+    }
+    cat("Completed Fold", i, "\n")
+  }
+  all_non_coefs[, nfold] = res[seq(1, 200, by = 2)]
+  
+  
+  mean_dev <- rowMeans(all_deviances)
+  lambda.min <- lambdagrid[which.min(mean_dev)]
+  
+  
+  cv_se <- sqrt(var(mean_dev))
+  rownames(all_deviances) <- lambdagrid
+  return(list(lambda.min = lambda.min, non_zero_coefs = non_zero_coefs, lambdagrid = lambdagrid, 
+              cv_se = cv_se, deviance_grid = all_deviances, selected_coefs_grid = all_non_coefs))
+}
+
+
+
+
 ###########################################################
 #' Calculate multinomial deviance on fitSmoothHazard object
-multi_deviance_fsh <- function(X, response, coefs) {
+multi_deviance_fsh <- function(covs, response, coefs, add_intercept) {
+  print(add_intercept)
+  if(add_intercept) {
+    X <- as.matrix(cbind(covs, 1))
+  } else {
+    X = covs
+  }
+  
   fitted_vals <- as.matrix(X %*% coefs)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
                                    inverse = TRUE)

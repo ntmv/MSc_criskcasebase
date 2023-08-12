@@ -96,7 +96,7 @@ fit.glmnet.relaxed <- glmnet::cv.glmnet(
 # Elastic-net reparametrization
 # mtool
 glmnet_lambda_max = fit.glmnet.relaxed$lambda[1]
-fit.mtool.relaxed <- multinom.relaxed_enet(X = X, Y = Y, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.1)
+fit.mtool.relaxed <- multinom.relaxed_enet_nnet(X = X, Y = Y, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.1)
 
 plot(fit.glmnet.relaxed)
 plot_post_relaxed.multinom(fit.mtool.relaxed)
