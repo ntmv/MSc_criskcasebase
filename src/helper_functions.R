@@ -20,294 +20,6 @@ library(dplyr)
 #' Fits linear regression using relaxed LASSO regularization to given data
 #' @param: train_data - dataframe containing values of features
 #' @param: response - list of response values
-#' @param: folds - number of folds used to compute cross validation MSE (default is 5)
-#' @param: print_time - boolean indicating whether to print time function takes to run
-myRelaxedGlmnetFolds = function(train_data, response, folds = 5, print_time) {
-  tryCatch({ 
-    if(print_time)
-      tic()
-  
-    coefficient_names = colnames(as.data.frame(train_data))
-    response_name = names(as.data.frame(response))
-    
-    # Data frame and list to keep track of coefficients and CV-MSEs of all lambdas
-    coefs_all_lambdas = data.frame(matrix(nrow = 1, ncol = length(coefficient_names) + 1))
-    colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
-    MSEs_all_lambda = c()
-    
-    fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, nfolds = folds, alpha=1)
-    all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
-
-    # Local variables to track lowest CV-MSE, best fit, and index of lambda of lowest MSE while iterating over all lambdas
-    current_MSE = .Machine$double.xmax;
-    best_fit = lm(1~1)
-    best_lambda_index = 0
-  
-    # Iterate over all lambdas
-    indices = c(1:length(all_coef_fit_lasso))
-  
-    for(i in indices) {
-      rows = nrow(coefs_all_lambdas)
-      current_coef = all_coef_fit_lasso[i]
-      non_zero_coef = current_coef[all_coef_fit_lasso[i] != 0]
-      all_zeros = length(non_zero_coef) == 0
-      
-      # If no predictors selected, skip OLS with cross validation and continue with next lambda
-      if (all_zeros){
-        coefs_all_lambdas[rows,] = 0
-        next
-      }
-      
-      
-      # TODO: Look into using predict() with type = "nonzero" as a way to get nonzero coefficients from a glmnet fit for particular lambda values
-      # (might be more efficent that using which and subsetting the whole training set, then refitting with lm())
-      
-      # Create new training dataframe to pass to lm() for OLS fit on selected predictors
-      non_zero_coef_indices = which(current_coef != 0)
-      non_zero_coef_names = coefficient_names[non_zero_coef_indices]
-      new_x_train = train_data[, non_zero_coef_indices]
-
-      # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
-      
-      #Perform cross-validation
-      
-      fold_ids = fit_lasso$foldid
-      mse_values = c()
-      
-      for(m in c(1:folds)) {
-        train_indices = which(fold_ids != m)
-
-        # Check if new training data includes one or more covariates to make sure it is subsetted as a matrix or a list correctly
-        if (is.matrix(new_x_train)) {
-          traindata = new_x_train[train_indices, ]
-          testdata = new_x_train[-train_indices, ]
-        } else {
-          traindata = new_x_train[train_indices]
-          testdata = new_x_train[-train_indices]
-        }
-        ytrain = response[train_indices]
-        ytest = response[-train_indices]
-        
-        # Check what type to treat validation data as
-        if(is.null(ncol(testdata))) {
-          testdata = as.list(testdata)
-        } else {
-          testdata = as.data.frame.matrix(testdata)
-        }
-        
-
-        data = data.frame(traindata, ytrain)
-        if(length(data) < 3) {
-          names(data) = c(non_zero_coef_names, response_name)
-          names(testdata) = non_zero_coef_names
-        } else {
-          colnames(data) = c(non_zero_coef_names, response_name)
-          colnames(testdata) = non_zero_coef_names
-        }
-
-        form = as.formula(paste(response_name, "~."))
-        fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
-        pred = predict(fit_OLS_on_LASSO_subset, newdata = testdata)
-        
-        mse_values[m] = mean((ytest - pred)^2)
-      }
-
-      MSE = mean(mse_values)
-      
-      # Format new row of coefficient table for current lambda
-      coefs_all_lambdas[rows+1,] = 0
-      j = 1
-      
-      for (l in c(1:length(coefs_all_lambdas))) {
-        if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
-          break
-        if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
-          coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
-          j = j + 1
-        }
-      } 
-  
-      MSEs_all_lambda = rbind(MSEs_all_lambda, MSE)
-  
-      if(MSE < current_MSE) {
-        current_MSE = MSE
-        best_fit = fit_OLS_on_LASSO_subset
-        best_lambda_index = i
-      }
-    }
-  }
-  ,
-  error = function(e) {
-    print(e)
-  }
-  ,
-  warning = function(w) {
-  }
-  )
-  if(print_time)
-    toc()
-  
-  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
-                min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
-                best_fit = best_fit)
-  return (result)
-}
-
-
-
-#' Fits linear regression using relaxed LASSO regularization to given data
-#' @param: train_data - dataframe containing values of features
-#' @param: response - list of response values
-#' @param: folds - number of folds used to compute cross validation MSE (default is 5)
-#' @param: print_time - boolean indicating whether to print time function takes to run
-myRelaxedCustomFolds = function(train_data, response, cv, folds = 5, print_time) {
-  tryCatch({ 
-    if(print_time)
-      tic()
-    
-    # Get lambda grid from glmnet fit on entire training set
-    
-    
-    # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
-    
-    #Perform cross-validation
-    folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
-    res = list()
-    mse_values = c()
-    for(m in 1:folds) {
-      train_indices <- folds_list[[m]]
-
-      if (is.matrix(new_x_train)) {
-        traindata = new_x_train[train_indices, ]
-        testdata = new_x_train[-train_indices, ]
-      } else {
-        traindata = new_x_train[train_indices]
-        testdata = new_x_train[-train_indices]
-      }
-      ytrain = response[train_indices]
-      ytest = response[-train_indices]
-      
-      fit_lasso = glmnet(traindata, ytrain, family="gaussian", alpha=1)
-      all_coef_fit_lasso = as.data.frame.matrix(coef(fit_lasso))[-1, ]
-      
-      
-      
-      if(is.null(ncol(testdata))) {
-        testdata = as.list(testdata)
-      } else {
-        testdata = as.data.frame.matrix(testdata)
-      }
-      
-      
-      data = data.frame(traindata, ytrain)
-      if(length(data) < 3) {
-        names(data) = c(non_zero_coef_names, response_name)
-        names(testdata) = non_zero_coef_names
-      } else {
-        colnames(data) = c(non_zero_coef_names, response_name)
-        colnames(testdata) = non_zero_coef_names
-      }
-      
-      form = as.formula(paste(response_name, "~."))
-      fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
-      pred = predict(fit_OLS_on_LASSO_subset, newdata = testdata)
-      
-      mse_values[m] = mean((ytest - pred)^2)
-    }
-    
-    coefficient_names = colnames(as.data.frame(train_data))
-    response_name = names(as.data.frame(response))
-    
-    # Data frame and list to keep track of coefficients and CV-MSEs of all lambdas
-    coefs_all_lambdas = data.frame(matrix(nrow = 1, ncol = length(coefficient_names) + 1))
-    colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
-    MSEs_all_lambda = c()
-    
-    if (cv) {
-      fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, alpha=1)
-      all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
-    }
-    else {
-    }
-    
-    # Local variables to track lowest CV-MSE, best fit, and index of lambda of lowest MSE while iterating over all lambdas
-    current_MSE = .Machine$double.xmax;
-    best_fit = lm(1~1)
-    best_lambda_index = 0
-    
-    # Iterate over all lambdas
-    indices = c(1:length(all_coef_fit_lasso))
-    
-    for(i in indices) {
-      rows = nrow(coefs_all_lambdas)
-      current_coef = all_coef_fit_lasso[i]
-      non_zero_coef = current_coef[all_coef_fit_lasso[i] != 0]
-      all_zeros = length(non_zero_coef) == 0
-      
-      # If no predictors selected, skip OLS with cross validation and continue with next lambda
-      if (all_zeros){
-        coefs_all_lambdas[rows,] = 0
-        next
-      }
-      
-      
-      # TODO: Look into using predict() with type = "nonzero" as a way to get nonzero coefficients from a glmnet fit for particular lambda values
-      # (might be more efficent that using which and subsetting the whole training set, then refitting with lm())
-      
-      # Create new training dataframe to pass to lm() for OLS fit on selected predictors
-      non_zero_coef_indices = which(current_coef != 0)
-      non_zero_coef_names = coefficient_names[non_zero_coef_indices]
-      new_x_train = train_data[, non_zero_coef_indices]
-      
-      
-      
-      MSE = mean(mse_values)
-      
-      # Format new row of coefficient table for current lambda
-      coefs_all_lambdas[rows+1,] = 0
-      j = 1
-      
-      for (l in c(1:length(coefs_all_lambdas))) {
-        if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
-          break
-        if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
-          coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
-          j = j + 1
-        }
-      } 
-      
-      MSEs_all_lambda = rbind(MSEs_all_lambda, MSE)
-      
-      if(MSE < current_MSE) {
-        current_MSE = MSE
-        best_fit = fit_OLS_on_LASSO_subset
-        best_lambda_index = i
-      }
-    }
-  }
-  ,
-  error = function(e) {
-    print(e)
-  }
-  ,
-  warning = function(w) {
-  }
-  )
-  if(print_time)
-    toc()
-  
-  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
-                min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
-                best_fit = best_fit)
-  return (result)
-}
-
-
-
-
-#' Fits linear regression using relaxed LASSO regularization to given data
-#' @param: train_data - dataframe containing values of features
-#' @param: response - list of response values
 #' @param: cv - boolean indicating whether to fit lasso with cross validation or not
 #' @param: print_time - boolean indicating whether to print time function takes to run
 myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
@@ -449,155 +161,6 @@ myRelaxedFinal = function(train_data, response, folds = 5, print_time = FALSE) {
                 best_fit = best_fit)
   return (result)
 }
-
-
-
-
-#' Fits linear regression using relaxed LASSO regularization to given data
-#' @param: train_data - dataframe containing values of features
-#' @param: response - list of response values
-#' @param: cv - boolean indicating whether to fit lasso with cross validation or not
-#' @param: print_time - boolean indicating whether to print time function takes to run
-myRelaxedOld = function(train_data, response, cv, folds = 5, print_time) {
-  tryCatch({ 
-    if(print_time)
-      tic()
-    
-    coefficient_names = colnames(as.data.frame(train_data))
-    response_name = names(as.data.frame(response))
-    
-    # Data frame and list to keep track of coefficients and CV-MSEs of all lambdas
-    coefs_all_lambdas = data.frame(matrix(nrow = 1, ncol = length(coefficient_names) + 1))
-    colnames(coefs_all_lambdas) = c("(Intercept)", coefficient_names)
-    MSEs_all_lambda = c()
-    
-    if (cv) {
-      fit_lasso = cv.glmnet(train_data, response, family="gaussian", keep=TRUE, alpha=1)
-      all_coef_fit_lasso = as.data.frame.matrix(fit_lasso$glmnet.fit$beta)
-    }
-    else {
-      fit_lasso = glmnet(train_data, response, family="gaussian", alpha=1)
-      all_coef_fit_lasso = as.data.frame.matrix(coef(fit_lasso))[-1, ]
-    }
-    
-    # Local variables to track lowest CV-MSE, best fit, and index of lambda of lowest MSE while iterating over all lambdas
-    current_MSE = .Machine$double.xmax;
-    best_fit = lm(1~1)
-    best_lambda_index = 0
-    
-    # Iterate over all lambdas
-    indices = c(1:length(all_coef_fit_lasso))
-    
-    for(i in indices) {
-      rows = nrow(coefs_all_lambdas)
-      current_coef = all_coef_fit_lasso[i]
-      non_zero_coef = current_coef[all_coef_fit_lasso[i] != 0]
-      all_zeros = length(non_zero_coef) == 0
-      
-      # If no predictors selected, skip OLS with cross validation and continue with next lambda
-      if (all_zeros){
-        coefs_all_lambdas[rows,] = 0
-        next
-      }
-      
-      
-      # TODO: Look into using predict() with type = "nonzero" as a way to get nonzero coefficients from a glmnet fit for particular lambda values
-      # (might be more efficent that using which and subsetting the whole training set, then refitting with lm())
-      
-      # Create new training dataframe to pass to lm() for OLS fit on selected predictors
-      non_zero_coef_indices = which(current_coef != 0)
-      non_zero_coef_names = coefficient_names[non_zero_coef_indices]
-      new_x_train = train_data[, non_zero_coef_indices]
-      
-      # TODO: replace lm() with: solve(t(X) %*% X) %*% t(X) %*% y
-      
-      #Perform cross-validation
-      folds_list <- createFolds(response, k = folds, list = TRUE, returnTrain = TRUE)
-      res = list()
-      mse_values = c()
-      for(m in 1:folds) {
-        train_indices <- folds_list[[m]]
-        # TODO: Fix code so column names
-        # if(is.numeric(new_x_train)) {
-        #   names(new_x_train) = c(non_zero_coef_names)
-        # } else {
-        #   colnames(new_x_train) = c(non_zero_coef_names)
-        # }
-        if (is.matrix(new_x_train)) {
-          traindata = new_x_train[train_indices, ]
-          testdata = new_x_train[-train_indices, ]
-        } else {
-          traindata = new_x_train[train_indices]
-          testdata = new_x_train[-train_indices]
-        }
-        ytrain = response[train_indices]
-        ytest = response[-train_indices]
-        
-        
-        if(is.null(ncol(testdata))) {
-          testdata = as.list(testdata)
-        } else {
-          testdata = as.data.frame.matrix(testdata)
-        }
-        
-        
-        data = data.frame(traindata, ytrain)
-        if(length(data) < 3) {
-          names(data) = c(non_zero_coef_names, response_name)
-          names(testdata) = non_zero_coef_names
-        } else {
-          colnames(data) = c(non_zero_coef_names, response_name)
-          colnames(testdata) = non_zero_coef_names
-        }
-        
-        form = as.formula(paste(response_name, "~."))
-        fit_OLS_on_LASSO_subset = lm(formula = form, data = data, x = TRUE, y = TRUE)
-        pred = predict(fit_OLS_on_LASSO_subset, newdata = testdata)
-        
-        mse_values[m] = mean((ytest - pred)^2)
-      }
-      
-      MSE = mean(mse_values)
-      
-      # Format new row of coefficient table for current lambda
-      coefs_all_lambdas[rows+1,] = 0
-      j = 1
-      
-      for (l in c(1:length(coefs_all_lambdas))) {
-        if(is.na(fit_OLS_on_LASSO_subset$coefficients[j]))
-          break
-        if(colnames(coefs_all_lambdas)[l] == names(fit_OLS_on_LASSO_subset$coefficients[j])) {
-          coefs_all_lambdas[i, l] = fit_OLS_on_LASSO_subset$coefficients[j]
-          j = j + 1
-        }
-      } 
-      
-      MSEs_all_lambda = rbind(MSEs_all_lambda, MSE)
-      
-      if(MSE < current_MSE) {
-        current_MSE = MSE
-        best_fit = fit_OLS_on_LASSO_subset
-        best_lambda_index = i
-      }
-    }
-  }
-  ,
-  error = function(e) {
-    print(e)
-  }
-  ,
-  warning = function(w) {
-  }
-  )
-  if(print_time)
-    toc()
-  
-  result = list(coefficients = coefs_all_lambdas, CV_MSEs = MSEs_all_lambda, all_lambdas = fit_lasso$lambda, 
-                min_lambda = fit_lasso$lambda[best_lambda_index], min_lambda_index = best_lambda_index, 
-                best_fit = best_fit)
-  return (result)
-}
-
 
 
 
@@ -919,11 +482,11 @@ plot_myRelaxed = function(relaxed_object) {
 
 ###########################################################
 #' relaxed LASSO function for mtool 
-multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+multinom.relaxed_enet_test <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                                   constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                                   ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
   # FOR TESTING
-  # regularization = 'elastic-net'; lambda_max = NULL; alpha = 1; nfold = 10;
+  # regularization = 'elastic-net'; lambda_max = NULL; alpha = 0.7; nfold = 10;
   # constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE;
   # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l = 1;
   print("RELAXED")
@@ -940,9 +503,16 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
   non_zero_coefs_matrix <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   lowest_deviance = .Machine$double.xmax
 
+  all_non_coefs <- c()
+  
+  
   current_deviance = .Machine$double.xmax
   best_fit = NULL
   min_lambda_index = 0
+  
+  cb_data_all = list("event_ind" = Y,
+                     "covariates" = X,
+                     "offset" = rep(0, length(Y)))
   
   #Perform 10 fold cross validation
   for(i in 1:nfold){
@@ -961,41 +531,58 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
                          "offset" = rep(0, length(Y_train)))
     
     
-    all_deviances[, i] <- unlist(mclapply(lambdagrid,
-                        function(lambda_v) {
-                          # lambda1 <- lambda_v*alpha
-                          # lambda2 <- 0.5*lambda_v*(1 - alpha)
-                          # mtool
-                          fit.mtool.parameterized <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                                                 lambda = lambda_v, alpha = alpha, unpen_cov = 1)
-                          coefs_cause1 = fit.mtool.parameterized$coefficients[, 1]
-                          coefs_cause2 = fit.mtool.parameterized$coefficients[, 2]
-                          
-                          
-                          selected_cause1 <- which(coefs_cause1 != 0)
-                          selected_cause2 <- which(coefs_cause2 != 0)
-                          
-                          # Maybe try just using first cause 1
-                          non_zero_coef_names <- paste("x", as.character(sort(union(selected_cause1, selected_cause2))), 
-                                                       sep = "")
-                          
-                          X_train_new <- X_train[, colnames(X_train) %in% non_zero_coef_names]
-                          X_val_new <- X_val[, colnames(X_train) %in% non_zero_coef_names]
-                    
-                          
-                          cb_data_train_new <- list("event_ind" = Y_train,
-                                                    "covariates" = X_train_new,
-                                                    "offset" = rep(0, length(Y_train)))
-                          
-                          
-                          fit.mtool.subset <- fit_cbmodel(cb_data_train_new, regularization = 'elastic-net',
-                                                                 lambda = 0.000001, alpha = alpha, unpen_cov = 1)
-                          
-                          multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)
-                        },
+    res <- unlist(mclapply(lambdagrid,
+              function(lambda_v) {
+                fit.mtool.parameterized <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                                       lambda = lambda_v, alpha = alpha, unpen_cov = 1)
+                coefs_cause1 = fit.mtool.parameterized$coefficients[, 1]
+                coefs_cause2 = fit.mtool.parameterized$coefficients[, 2]
+                
+                
+                selected_cause1 <- which(coefs_cause1 != 0)
+                selected_cause2 <- which(coefs_cause2 != 0)
+                non_zero_coef_namesunion(selected_cause1, selected_cause2)
+                
+                # Maybe try just using first cause 1
+                non_zero_coef_names <- paste("x", as.character(sort(union(selected_cause1, selected_cause2))), 
+                                             sep = "")
+                
+
+                X_train_new <- X_train[, colnames(X_train) %in% non_zero_coef_names]
+                X_val_new <- X_val[, colnames(X_train) %in% non_zero_coef_names]
+          
+                
+                cb_data_train_new <- list("event_ind" = Y_train,
+                                          "covariates" = X_train_new,
+                                          "offset" = rep(0, length(Y_train)))
+                
+                
+                fit.mtool.subset <- fit_cbmodel(cb_data_train_new, regularization = 'elastic-net',
+                                                       lambda = 0.000001, alpha = alpha, unpen_cov = 1)
+                
+                
+                if(i == nfold) {
+                  fit.all.data = fit_cbmodel(cb_data_all, regularization = 'elastic-net',
+                                                   lambda = lambda_v, alpha = alpha, unpen_cov = 1)
+                  non_zero_coefs = length(union(which(fit.all.data$coefficients[, 1] != 0), 
+                                                  which(fit.all.data$coefficients[, 2] != 0)))
+                  list(length(non_zero_coefs), 
+                       multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients))
+                  
+                } else {
+                  multi_deviance_fsh(covs = X_val_new, response = Y_val, coefs = fit.mtool.subset$coefficients)
+                }
+              },
     mc.cores = ncores, mc.set.seed = seed))
+    if(i == nfold) {
+      all_deviances[, i] = res[seq(2, 200, by = 2)]
+    } else {
+      all_deviances[, i] = res
+    }
     cat("Completed Fold", i, "\n")
   }
+  all_non_coefs[, nfold] = res[seq(1, 200, by = 2)]
+  
 
   mean_dev <- rowMeans(all_deviances)
   lambda.min <- lambdagrid[which.min(mean_dev)]
@@ -1004,14 +591,137 @@ multinom.relaxed_enet <- function(X, y, regularization = 'elastic-net', lambda_m
   cv_se <- sqrt(var(mean_dev))
   rownames(all_deviances) <- lambdagrid
   return(list(lambda.min = lambda.min, non_zero_coefs = non_zero_coefs, lambdagrid = lambdagrid, 
+              cv_se = cv_se, deviance_grid = all_deviances, selected_coefs_grid = all_non_coefs))
+}
+
+
+
+
+
+
+###########################################################
+#' relaxed LASSO function for mtool 
+multinom.relaxed_enet <- function(X, Y, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+                                  constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
+                                  ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
+  # FOR TESTING
+  # regularization = 'elastic-net'; lambda_max = NULL; alpha = 1; nfold = 10;
+  # constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .0001; grid_size = 100; plot = FALSE;
+  # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; i = 1; l = 1; lambda_max = 0.2
+  p = ncol(X)
+  
+  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  print(lambdagrid)
+  
+  
+  # Create folds 
+  folds <- caret::createFolds(y = Y, k = nfold, list = FALSE)
+  lambda.min <- rep(NA_real_, nfold)
+  all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  non_zero_coefs_matrix <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  lowest_deviance = .Machine$double.xmax
+  
+  current_deviance = .Machine$double.xmax
+  best_fit = NULL
+  min_lambda_index = 0
+  
+  #Perform 10 fold cross validation
+  for(i in 1:nfold){
+    #Segment your data by fold using the which() function 
+    X_train <- as.matrix(X[which(folds != i), ]) #Set the training set
+    X_val <- as.matrix(X[which(folds == i), ]) #Set the validation set
+    Y_train <- as.numeric(Y[which(folds != i)]) - 1 #Set the training set
+    Y_val <- as.numeric(Y[which(folds == i)]) - 1 #Set the validation set
+    
+    # Standardize
+    X_train <- scale(X_train, center = T, scale = T)
+    X_val <- scale(X_val, center = T, scale = T)
+    
+    cb_data_train = list("event_ind" = Y_train,
+                         "covariates" = X_train,
+                         "offset" = rep(0, length(Y_train)))
+    
+    
+    all_deviances[, i] <- unlist(
+      mclapply(lambdagrid,
+                function(lambda_v) {
+                  dev = 0
+                  # lambda1 <- lambda_v*alpha
+                  # lambda2 <- 0.5*lambda_v*(1 - alpha)
+                  # mtool
+                  fit.mtool.parameterized <- fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                                         lambda = lambda_v, alpha = alpha, unpen_cov = 1)
+                  coefs_cause1 = fit.mtool.parameterized$coefficients[, 1]
+                  coefs_cause2 = fit.mtool.parameterized$coefficients[, 2]
+                  
+                  
+                  selected_cause1 <- which(coefs_cause1 != 0)
+                  selected_cause2 <- which(coefs_cause2 != 0)
+                  
+                  # Maybe try just using first cause 1
+                  non_zero_coef_names <- paste("x", 
+                                               as.character(sort(union(selected_cause1, selected_cause2))), 
+                                               sep = "")
+                  non_zero_coef_names_no_int = non_zero_coef_names[1:length(non_zero_coef_names) - 1]
+                  
+                  all_zeros = length(non_zero_coef_names) == 1
+                  
+                  if (all_zeros){
+                    print("ALL ZEROS")
+                    # If no predictors selected, skip OLS with cross validation and continue with next lambda
+                    X_train_new <- as.matrix(rep(1, nrow(X_train)))
+                    X_val_new <- as.matrix(rep(1, nrow(X_val)))
+                    
+                    coef = t(as.matrix(fit.mtool.parameterized$coefficients[nrow(fit.mtool.parameterized$coefficients), ]))
+                    dev = multi_deviance_fsh(X = X_val_new, response = Y_val, coefs = coef)
+                    
+                  } else {
+                    print("NON ZEROS")
+                    X_train_new <- X_train[, colnames(X_train) %in% non_zero_coef_names]
+                    X_val_new <- cbind(X_val[, colnames(X_val) %in% non_zero_coef_names], 1)
+                    
+                    
+                    p_new = length(non_zero_coef_names_no_int)
+                    
+                    dfM_subset = cbind.data.frame(X_train_new, Y_train)
+                    
+                    colnames(dfM_subset) = c(non_zero_coef_names_no_int, "y")
+                    
+                    formula = ""
+                    for (j in non_zero_coef_names_no_int) {
+                      formula = paste(formula, j, "+")
+                    }
+                    formula = as.formula(paste("y ~", substr(formula, 2, str_length(formula) - 2)))
+                    
+                    
+                    fit.subset <- nnet::multinom(formula,
+                                                 data = dfM_subset)
+                    
+                    coef_subset = rbind(t(coef(fit.subset))[2:(p_new + 1), ],
+                                        t(coef(fit.subset))[1, ])
+                    
+                    dev = multi_deviance_fsh(X = X_val_new, response = Y_val, coefs = coef_subset)
+                  }
+                  
+                  dev
+                },
+                mc.cores = ncores, mc.set.seed = seed))
+    cat("Completed Fold", i, "\n")
+  }
+  
+  mean_dev <- rowMeans(all_deviances)
+  lambda.min <- lambdagrid[which.min(mean_dev)]
+  
+  
+  cv_se <- sqrt(var(mean_dev))
+  rownames(all_deviances) <- lambdagrid
+  return(list(lambda.min = lambda.min, lambdagrid = lambdagrid, 
               cv_se = cv_se, deviance_grid = all_deviances))
 }
 
 ###########################################################
 #' Calculate multinomial deviance on fitSmoothHazard object
-multi_deviance_fsh <- function(covs, response, coefs) {
-  # X <- covs
-  X <- as.matrix(cbind(covs, 1))
+multi_deviance_fsh <- function(X, response, coefs) {
   fitted_vals <- as.matrix(X %*% coefs)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
                                    inverse = TRUE)
@@ -1284,12 +994,18 @@ plot_post_relaxed.multinom <- function(cv_object) {
   nfold <- ncol(cv_object$deviance_grid)
   mean_dev <- rowMeans(cv_object$deviance_grid)
   row_stdev <- apply(cv_object$deviance_grid, 1, function(x) {sd(x)/sqrt(nfold)})
-  plot.dat <- data.frame(lambdagrid = cv_object$lambdagrid, mean.dev = mean_dev, 
+  plot.dat.p <- data.frame(lambdagrid = cv_object$lambdagrid, mean.dev = mean_dev, 
                          upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
-  p <- ggplot(plot.dat, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() + 
+  p <- ggplot(plot.dat.p, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() + 
     geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, position=position_dodge(0.05), colour = "grey") + 
     labs(x = "log(lambda)", y = "Multinomial Deviance")  + 
     geom_vline(xintercept = log(cv_object$lambda.min), linetype = "dotted", colour = "blue")
+  
+  # plot.dat.g <- data.frame(no_coefs = cv_object$lambdagrid, mean.dev = mean_dev, 
+  #                          upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
+  # 
+  # g <-
+  # 
   return(p)
 }
 
