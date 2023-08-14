@@ -107,37 +107,42 @@ covAR1 <- function(p, rho) {
 mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                               constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                               ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
-  surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-  cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
-  # Create case-base dataset
-  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
-  # Default lambda grid
-  if(is.null(lambda_max)) {
-    # Lambda max grid for bisection search 
-    if(is.null(initial_max_grid)) {
-      initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
-      fit_val_max <- mclapply(initial_max_grid, 
-                              function(lambda_val) {
-                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                            lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
-      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
-      if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
-        warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
-      }
-      upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
-      lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
-      new_max_searchgrid <- seq(lower, upper, precision)
-      fit_val_max <-  mclapply(new_max_searchgrid, 
-                               function(lambda_val) {
-                                 fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-                                             lambda = lambda_val, alpha = alpha,
-                                             unpen_cov = constant_covariates)}, mc.cores = ncores, mc.set.seed = seed)
-      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
-      lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
-    }
-    lambda_max = max(initial_max_grid)
-  }
+  print("CV")
+  # surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+  # cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
+  # # Create case-base dataset
+  # cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
+  # # Default lambda grid
+  # if(is.null(lambda_max)) {
+  #   # Lambda max grid for bisection search 
+  #   if(is.null(initial_max_grid)) {
+  #     initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
+  #     fit_val_max <- mclapply(initial_max_grid, 
+  #                             function(lambda_val) {
+  #                               fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+  #                                           lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
+  #     non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
+  #     if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
+  #       warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
+  #     }
+  #     upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
+  #     lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
+  #     new_max_searchgrid <- seq(lower, upper, precision)
+  #     fit_val_max <-  mclapply(new_max_searchgrid, 
+  #                              function(lambda_val) {
+  #                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+  #                                            lambda = lambda_val, alpha = alpha,
+  #                                            unpen_cov = constant_covariates)}, mc.cores = ncores, mc.set.seed = seed)
+  #     non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
+  #     lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
+  #   } 
+  #   # else {
+  #   #   lambda_max = max(initial_max_grid)
+  #   # }
+  # }
+  cb_data_train = train
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  print(lambdagrid)
   
   cb_data_train <- as.data.frame(cb_data_train)
   cb_data_train <- cb_data_train %>%
@@ -214,7 +219,7 @@ plot_cv.multinom <- function(cv_object) {
     labs(x = "log(lambda)", y = "Multinomial Deviance")  + 
     geom_vline(xintercept = log(cv_object$lambda.min), linetype = "dotted", colour = "blue") + 
     geom_vline(xintercept = log(cv_object$lambda.1se), linetype = "dotted", 
-               colour = "purple")
+               colour = "purple") 
   return(p)
 }
 
@@ -933,10 +938,11 @@ multinom.post_enet <- function(fit_object, cause = 1) {
 
 ########### Sketch of function for post-LASSO (or post elastic net in this case) #########
 # Look into ... argument to pass parameters from other functions because you want to pass cross-validation parameters
-multinom.post_enet_old <- function(train, test, nfold = 5, seed = 2023) {
+multinom.post_enet_old <- function(train, test, nfold = 5, seed = 2023, initial_max_grid = NULL) {
+  print("POST")
   p = ncol(train) - 2
   # Train case-base model to get lambda.min
-  cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfold)
+  cv.lambda <- mtool.multinom.cv(train, seed = seed, nfold = nfold, initial_max_grid = initial_max_grid)
   # This fit (with lambda.min) needs to be de-biased
   # Fit on test set
   # Covariance matrix
