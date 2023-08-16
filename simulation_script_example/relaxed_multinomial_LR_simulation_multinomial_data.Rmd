@@ -49,10 +49,10 @@ X <- matrix(rnorm(n * p), n, p)
 
 # coefficients for each choice
 X1 <- rep(0, p)
-X2 <- c(rep(3, p/10), rep(0, 9*p/10))
+X2 <- c(rep(3, p/2), rep(0, p/2))
 zero_X2 <- which(X2 == 0)
 
-X3 <- c(rep(3, p/10), rep(0, 9*p/10))
+X3 <- c(rep(3, p/2), rep(0, p/2))
 zero_X3 <- which(X3 == 0)
 
 
@@ -74,7 +74,7 @@ X <- as.matrix(dfM[, c(2:(p+1))])
 # Rename covariates 
 colnames(X) <- paste0('x', 1:p)
 
-train = list("covariates" = X, "event_ind" = as.numeric(Y) - 1, "offset" = rep(0, length(Y)), "time" = rep(0, length(Y)))
+train1 = list("covariates" = X, "event_ind" = as.numeric(Y) - 1, "offset" = rep(0, length(Y)), "time" = rep(0, length(Y)))
 ```
 
 
@@ -99,12 +99,28 @@ fit.glmnet.relaxed <- glmnet::cv.glmnet(
 # mtool
 glmnet_lambda_max = fit.glmnet.relaxed$lambda[1]
 
-fit.mtool.relaxed_nnet <- multinom.relaxed_lasso_nnet(train = train, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.01)
+fit.mtool.relaxed_nnet_old_mtool <- multinom.relaxed_lasso_nnet_old_mtool(train = train1, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.001)
+fit.mtool.relaxed_nnet_old_mtool$lambdagrid
+fit.mtool.relaxed_nnet_old_mtool$coef_grid
 
-fit.mtool.relaxed_penalized_normal_gamma_mine <- multinom.relaxed_lasso_mtool(train = train, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.1, gamma = 0.009)
+fit.mtool.relaxed_mtool_old_mtool <- multinom.relaxed_lasso_mtool_old_mtool(train = train1, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.001, gamma = 0.009)
+fit.mtool.relaxed_mtool_old_mtool$lambdagrid
+fit.mtool.relaxed_mtool_old_mtool$coef_grid
 
-fit.mtool.relaxed_penalized_normal_gamma <- multinom.relaxed_lasso(train = dfM, lambda_max = glmnet_lambda_max,
+fit.mtool.relaxed_Nirupama <- multinom.relaxed_lasso_Nirupama(train = dfM, lambda_max = glmnet_lambda_max,
                                                   gamma = 0.009, seed = seed, epsilon = 0.001)
+fit.mtool.relaxed_Nirupama$lambdagrid
+fit.mtool.relaxed_Nirupama$coef_grid
+
+fit.mtool.relaxed_correct_coefs_old_mtool <- multinom.relaxed_lasso_correct_coefs_old_mtool(train = dfM, lambda_max = glmnet_lambda_max,
+                                                  gamma = 0.009, seed = seed, epsilon = 0.001)
+fit.mtool.relaxed_correct_coefs_old_mtool$lambdagrid
+fit.mtool.relaxed_correct_coefs_old_mtool$coef_grid
+
+fit.mtool.relaxed_correct_coefs_new_mtool <- multinom.relaxed_lasso_correct_coefs_new_mtool(train = dfM, lambda_max = glmnet_lambda_max,
+                                                  gamma = 0.009, seed = seed, epsilon = 0.001)
+fit.mtool.relaxed_correct_coefs_new_mtool$lambdagrid
+fit.mtool.relaxed_correct_coefs_new_mtool$coef_grid
 ```
 #Plots
 ## Glmnet relaxed
@@ -112,20 +128,30 @@ fit.mtool.relaxed_penalized_normal_gamma <- multinom.relaxed_lasso(train = dfM, 
 plot(fit.glmnet.relaxed)
 ```
 
-## Implementation with unpenalized fit on subset using nnet
+## Implementation with unpenalized fit on subset using nnet using old mtool (i.e. with non-zero lambda2 value)
 ```{r plot-unpenalized-nnet}
-plot_post_relaxed.multinom_test(fit.mtool.relaxed_nnet)
+plot_post_relaxed.multinom_test(fit.mtool.relaxed_nnet_old_mtool)
 ```
 
 
 
-## My imlementation with penalized fit on subset using mtool, gamma = 0.009
+## My implementation with penalized fit on subset using mtool, gamma = 0.009, using old mtool (i.e. with non-zero lambda2 value)
 ```{r plot-penalized-normal-gamma-mine}
-plot_post_relaxed.multinom_test(fit.mtool.relaxed_penalized_normal_gamma_mine)
+plot_post_relaxed.multinom_test(fit.mtool.relaxed_mtool_old_mtool)
 ```
 
-## Nirupama's imlementation with penalized fit on subset using mtool, gamma = 0.009
+## Nirupama's implementation with penalized fit on subset using mtool, gamma = 0.009, with new mtool implementation (lambda2 = 0)
 ```{r plot-penalized-normal-gamma-nirupama}
-mtool_plot = plot_post_relaxed.multinom_test(fit.mtool.relaxed_penalized_normal_gamma)
-mtool_plot
+print(plot_post_relaxed.multinom_test(fit.mtool.relaxed_Nirupama))
+```
+
+## Nirupama's imlementation with penalized fit on subset using mtool, gamma = 0.009, using old mtool (i.e. with non-zero lambda2 value)
+```{r plot-penalized-normal-gamma-nirupama}
+print(plot_post_relaxed.multinom_test(fit.mtool.relaxed_correct_coefs_old_mtool))
+```
+
+
+## Nirupama's imlementation with penalized fit on subset using mtool, gamma = 0.009, using new mtool (i.e. lambda2 = 0)
+```{r plot-penalized-normal-gamma-nirupama}
+print(plot_post_relaxed.multinom_test(fit.mtool.relaxed_correct_coefs_new_mtool))
 ```
