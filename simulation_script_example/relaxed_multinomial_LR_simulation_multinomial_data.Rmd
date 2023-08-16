@@ -32,12 +32,12 @@ library(dplyr)
 
 
 # Helper functions 
-source("../src/helper_functions.R")
+source("../src/helper_functions_2.R")
 source("../src/fitting_functions.R")
 ```
 
 
-# Setup n > p (n = 500)
+# Setup n > p (n = 400)
 ``` {r setup-simulation,echo=FALSE}
 p = 20
 n = 400
@@ -49,10 +49,10 @@ X <- matrix(rnorm(n * p), n, p)
 
 # coefficients for each choice
 X1 <- rep(0, p)
-X2 <- c(rep(3, p/2), rep(0, p/2))
+X2 <- c(rep(3, p/10), rep(0, 9*p/10))
 zero_X2 <- which(X2 == 0)
 
-X3 <- c(rep(3, p/2), rep(0, p/2))
+X3 <- c(rep(3, p/10), rep(0, 9*p/10))
 zero_X3 <- which(X3 == 0)
 
 
@@ -80,13 +80,13 @@ train = list("covariates" = X, "event_ind" = as.numeric(Y) - 1, "offset" = rep(0
 
 # Check cv.glmnet(relax=TRUE) vs mtool relaxed implementation on multinomial data
 
-``` {r compare-implementations, echo=FALSE}
+``` {r compare-implementations, echo=FALSE, message=FALSE}
 alpha <- 1
-lambda <- 0.1
-lambda1 <- lambda*alpha
-lambda2 <- 0.5*lambda*(1 - alpha)
+# lambda <- 0.1
+# lambda1 <- lambda*alpha
+# lambda2 <- 0.5*lambda*(1 - alpha)
 
-# glmnet relax = TRUE
+#glmnet relax = TRUE
 set.seed(seed)
 fit.glmnet.relaxed <- glmnet::cv.glmnet(
   x = X, y = Y,
@@ -98,37 +98,34 @@ fit.glmnet.relaxed <- glmnet::cv.glmnet(
 # Elastic-net reparametrization
 # mtool
 glmnet_lambda_max = fit.glmnet.relaxed$lambda[1]
-fit.mtool.cv <- mtool.multinom.cv(train = train, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.1)
-fit.mtool.relaxed <- multinom.relaxed_enet_nnet(train = train, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.1)
 
+fit.mtool.relaxed_nnet <- multinom.relaxed_lasso_nnet(train = train, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.01)
+
+fit.mtool.relaxed_penalized_normal_gamma_mine <- multinom.relaxed_lasso_mtool(train = train, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.1, gamma = 0.009)
+
+fit.mtool.relaxed_penalized_normal_gamma <- multinom.relaxed_lasso(train = dfM, lambda_max = glmnet_lambda_max,
+                                                  gamma = 0.009, seed = seed, epsilon = 0.001)
+```
+#Plots
+## Glmnet relaxed
+```{r plot-glmnet}
 plot(fit.glmnet.relaxed)
-plot_cv.multinom(fit.mtool.cv)
-plot_post_relaxed.multinom(fit.mtool.relaxed)
 ```
 
-# Check nnet unparameterized multinomial logit vs mtool with low lambda
-
-``` {r fit-nnet-mtool, echo=FALSE, message = FALSE,results='hide'}
-list = paste0('x', 1:p)
-formula = ""
-for (i in list) {
-    formula = paste(formula, i, "+")
-}
-formula = as.formula(paste("y ~", substr(formula, 2, str_length(formula) - 2), "- 1"))
-capture.output(fit.nnet <- nnet::multinom(formula,
-                           data = dfM))
-
-cb_data_test = list("event_ind" = as.numeric(Y),
-                         "covariates" = X,
-                         "offset" = rep(0, length(Y)))
-
-capture.output(fit.mtool.test <- fit_cbmodel(cb_data_test, regularization = 'elastic-net',
-                                lambda = 0.000001, alpha = 0.7, unpen_cov = 1))
-
+## Implementation with unpenalized fit on subset using nnet
+```{r plot-unpenalized-nnet}
+plot_post_relaxed.multinom_test(fit.mtool.relaxed_nnet)
 ```
 
-``` {r compare-nnet-mtool, echo=FALSE}
-fit.nnet$deviance
-multi_deviance_fsh(covs = X, response = Y, fit.mtool.test$coefficients)
+
+
+## My imlementation with penalized fit on subset using mtool, gamma = 0.009
+```{r plot-penalized-normal-gamma-mine}
+plot_post_relaxed.multinom_test(fit.mtool.relaxed_penalized_normal_gamma_mine)
 ```
 
+## Nirupama's imlementation with penalized fit on subset using mtool, gamma = 0.009
+```{r plot-penalized-normal-gamma-nirupama}
+mtool_plot = plot_post_relaxed.multinom_test(fit.mtool.relaxed_penalized_normal_gamma)
+mtool_plot
+```
