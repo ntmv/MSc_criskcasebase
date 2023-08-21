@@ -1,5 +1,5 @@
 ---
-title: "Relaxed Lasso Glmnet Simulation"
+title: "Relaxed Lasso OLS Simulation"
 author: "Alexander Romanus"
 date: "`r Sys.Date()`"
 knit: (function(inputFile, encoding) { 
