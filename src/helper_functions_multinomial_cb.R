@@ -1,72 +1,4 @@
-################################################# My implementation functions ##################################################
-
-
-
-plot_post_relaxed.multinom_test <- function(cv_object) {
-  num_lambdas = length(cv_object$lambdagrid)
-  no_coef = cv_object$coef_grid[seq(1, num_lambdas, by = 5)]
-  nfold <- ncol(cv_object$deviance_grid)
-  mean_dev <- rowMeans(cv_object$deviance_grid)
-  row_stdev <- apply(cv_object$deviance_grid, 1, function(x) {sd(x)/sqrt(nfold)})
-  plot.dat.p <- data.frame(lambdagrid = cv_object$lambdagrid, mean.dev = mean_dev, 
-                           upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
-  p <- ggplot(plot.dat.p, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() + 
-    geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, colour = "grey") + 
-    labs(x = "log(lambda)", y = "Multinomial Deviance")  + 
-    geom_vline(xintercept = log(cv_object$lambda.min), linetype = "dotted", colour = "blue")
-  
-  positions = log(cv_object$lambdagrid)[seq(1, num_lambdas, by = 5)]
-  labels = cv_object$coef_grid[seq(1, num_lambdas, by = 5)]
-  
-  p1 <- add_secondary_axis(p, positions, labels)
-  
-  return(p1)
-}
-
-# Define a function to add secondary axis
-add_secondary_axis <- function(p, positions, labels) {
-  print(positions)
-  print(labels)
-  n <- length(positions)
-  
-  if (n != length(labels)) {
-    stop("positions and labels must have the same length")
-  }
-  
-  # Get the current x-axis limits
-  x_limits <- ggplot_build(p)$layout$panel_scales_x[[1]]$range$range
-  
-  # Filter positions and labels that are within x-axis limits
-  valid_indices <- which(positions >= x_limits[1] & positions <= x_limits[2])
-  
-  if (length(valid_indices) < n) {
-    warning("Some positions are outside the x-axis limits and will be ignored.")
-    positions <- positions[valid_indices]
-    labels <- labels[valid_indices]
-  }
-  
-  # Dynamically get the y-limit based on the data in the plot
-  max_error_bar = max(ggplot_build(p)$data[[2]]$ymax)
-  y_data <- rep(max_error_bar, length(ggplot_build(p)$data[[2]]$ymax))
-  y_limit <- max(y_data) + 0.01 * diff(range(y_data))
-  
-  # Add text labels and tick marks
-  for (i in seq_along(positions)) {
-    # Text labels
-    p <- p + 
-      annotation_custom(
-        grob = grid::textGrob(label = labels[i], hjust = 0.5, gp = gpar(cex = 0.9)),
-        xmin = positions[i], xmax = positions[i],
-        ymin = y_limit, ymax = y_limit
-      )
-  }
-  
-  return(p)
-}
-
-
-#' ################################################# Final implementations functions ##################################################
-
+#' ################################################# Relaxed LASSO implementations ##################################################
 
 
 #' @param train: dataframe containing training data to fit model to, with first column being the response variable and the rest being the covariate values
@@ -344,6 +276,76 @@ multinom.relaxed_lasso_cb <- function(train, regularization = 'l1', lambda_max =
 
 
 
+#' ################################################# Helper functions for relaxed implementations ##################################################
+
+
+
+plot_post_relaxed.multinom_test <- function(cv_object) {
+  num_lambdas = length(cv_object$lambdagrid)
+  no_coef = cv_object$coef_grid[seq(1, num_lambdas, by = 5)]
+  nfold <- ncol(cv_object$deviance_grid)
+  mean_dev <- rowMeans(cv_object$deviance_grid)
+  row_stdev <- apply(cv_object$deviance_grid, 1, function(x) {sd(x)/sqrt(nfold)})
+  plot.dat.p <- data.frame(lambdagrid = cv_object$lambdagrid, mean.dev = mean_dev, 
+                           upper = mean_dev +row_stdev, lower = mean_dev - row_stdev)
+  p <- ggplot(plot.dat.p, aes(log(lambdagrid), mean.dev)) + geom_point(colour = "red", size = 3) + theme_bw() + 
+    geom_errorbar(aes(ymin= lower, ymax=upper), width=.2, colour = "grey") + 
+    labs(x = "log(lambda)", y = "Multinomial Deviance")  + 
+    geom_vline(xintercept = log(cv_object$lambda.min), linetype = "dotted", colour = "blue")
+  
+  positions = log(cv_object$lambdagrid)[seq(1, num_lambdas, by = 5)]
+  labels = cv_object$coef_grid[seq(1, num_lambdas, by = 5)]
+  
+  p1 <- add_secondary_axis(p, positions, labels)
+  
+  return(p1)
+}
+
+# Define a function to add secondary axis
+add_secondary_axis <- function(p, positions, labels) {
+  print(positions)
+  print(labels)
+  n <- length(positions)
+  
+  if (n != length(labels)) {
+    stop("positions and labels must have the same length")
+  }
+  
+  # Get the current x-axis limits
+  x_limits <- ggplot_build(p)$layout$panel_scales_x[[1]]$range$range
+  
+  # Filter positions and labels that are within x-axis limits
+  valid_indices <- which(positions >= x_limits[1] & positions <= x_limits[2])
+  
+  if (length(valid_indices) < n) {
+    warning("Some positions are outside the x-axis limits and will be ignored.")
+    positions <- positions[valid_indices]
+    labels <- labels[valid_indices]
+  }
+  
+  # Dynamically get the y-limit based on the data in the plot
+  max_error_bar = max(ggplot_build(p)$data[[2]]$ymax)
+  y_data <- rep(max_error_bar, length(ggplot_build(p)$data[[2]]$ymax))
+  y_limit <- max(y_data) + 0.01 * diff(range(y_data))
+  
+  # Add text labels and tick marks
+  for (i in seq_along(positions)) {
+    # Text labels
+    p <- p + 
+      annotation_custom(
+        grob = grid::textGrob(label = labels[i], hjust = 0.5, gp = gpar(cex = 0.9)),
+        xmin = positions[i], xmax = positions[i],
+        ymin = y_limit, ymax = y_limit
+      )
+  }
+  
+  return(p)
+}
+
+
+
+
+
 ############################################
 #' Fit multinomial logistic regression
 #'
@@ -408,7 +410,7 @@ multi_deviance <- function(data, fit_object) {
 
 
 ############################################
-#' Fit case-base sampling model
+#' Fit case-base sampling model with LASSO
 #'
 #' @param cb_data Output of \code{create_cbDataset}
 fit_cbmodel_lasso <- function(cb_data, regularization = 'l1',
@@ -436,9 +438,9 @@ fit_cbmodel_lasso <- function(cb_data, regularization = 'l1',
   return(out)
 }
 
-#' Multinomial deviance
+#' Multinomial deviance for a casebase fit
 #' 
-#' @param cb_cb_data Output of \code{create_cbcb_dataset}
+#' @param cb_cb_data Output of \code{create_cb_dataset}
 #' @param fit_object Output of \code{fit_cbmodel}
 #' @return Multinomial deviance
 multi_deviance_cb <- function(cb_data, fit_object) {
@@ -463,4 +465,37 @@ multi_deviance_cb <- function(cb_data, fit_object) {
   
   return(dev)
 }
+
+
+
+
+
+#' ################################################# Helper functions for multinomial simulation ##################################################
+
+generateDataset = function(p, n) {
+  beta = c(rep(5, p/2 + 1), rep(0, p/2))
+  beta = as.matrix(beta)
+  beta_neg = -beta
+  
+  
+  zero_ind1 <- which(beta == 0)
+  nonzero_ind1 <- which(beta != 0)
+  
+  
+  # Generate X (iid case)
+  X <- matrix(rnorm(n*p), nrow = n, ncol = p)
+  X = cbind(rep(1, times = n), X)
+  
+  
+  #Generate Y
+  epsilon <- rnorm(n, sd = 0.5)
+  Y1 = X %*% beta + epsilon
+  Y2 = X %*% beta_neg + epsilon
+  
+  result = list(X = X, Y = Y1)
+  return(result)
+}
+
+
+
 
