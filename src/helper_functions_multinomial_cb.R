@@ -10,7 +10,7 @@ multinom.relaxed_lasso_multinomial <- function(train, regularization = 'l1', lam
   # FOR TESTING
   # regularization = 'l1'; alpha = 1; nfold = 10;
   # constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .001; grid_size = 100; plot = FALSE;
-  # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; lambda_max = glmnet_lambda_max; gamma = 0.009; i = 10; train = dfM;
+  # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; lambda_max = glmnet_lambda_max; gamma = 0.01; i = 10; train = dfM;
   
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
   
@@ -94,8 +94,8 @@ multinom.relaxed_lasso_multinomial <- function(train, regularization = 'l1', lam
                  dev
                }, mc.cores = ncores, mc.set.seed = seed))
     if(i == nfold) {
-      all_deviances[, i] = res[seq(2, 200, by = 2)]
-      all_non_coefs = res[seq(1, 200, by = 2)]
+      all_deviances[, i] = res[seq(2, 2 * length(lambdagrid), by = 2)]
+      all_non_coefs = res[seq(1, 2 * length(lambdagrid), by = 2)]
     } else {
       all_deviances[, i] = res
     }
@@ -127,7 +127,7 @@ multinom.relaxed_lasso_cb <- function(train, regularization = 'l1', lambda_max =
   # FOR TESTING
   # regularization = 'l1'; alpha = 1; nfold = 10;
   # constant_covariates = 2; initial_max_grid = NULL; precision = 0.001; epsilon = .001; grid_size = 100; plot = FALSE;
-  # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; lambda_max = glmnet_lambda_max_survival; gamma = 0; i = 10; train = train_surv;
+  # ncores = parallelly::availableCores(); seed = 2023; train_ratio = 20; gamma = 0; i = 10; lambda_max = NULL; train = train_surv;
   
   
   surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
@@ -168,15 +168,17 @@ multinom.relaxed_lasso_cb <- function(train, regularization = 'l1', lambda_max =
   cb_data_train <- as.data.frame(cb_data_train)
   cb_data_train <- cb_data_train %>%
     select(-time)
-  cb_data_train_list = train_cv <- list("time" = cb_data_train$time,
-                                        "event_ind" = cb_data_train$event_ind,
-                                        "covariates" = cb_data_train[, grepl("covariates", names(cb_data_train))],
-                                        "offset" = cb_data_train$offset)
+  cb_data_train_list =  list("time" = cb_data_train$time,
+                            "event_ind" = cb_data_train$event_ind,
+                            "covariates" = cb_data_train[, grepl("covariates", names(cb_data_train))],
+                            "offset" = cb_data_train$offset)
   # Create folds 
   folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
   lambda.min <- rep(NA_real_, nfold)
   all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   non_zero_coefs <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  
+  p = length(cb_data_train_list$covariates) - 1
   
 
   
@@ -211,15 +213,20 @@ multinom.relaxed_lasso_cb <- function(train, regularization = 'l1', lambda_max =
                                                                lambda = lambda_v, alpha = alpha, unpen_cov = constant_covariates)
                  
                  # Extract non-zero coefficients
-                 coefs_cause1 = fit.mtool.penalized$coefficients[, 1]
-                 coefs_cause2 = fit.mtool.penalized$coefficients[, 2]
+                 coefs_cause1 = fit.mtool.penalized$coefficients[1:(p+1), 1]
+                 coefs_cause2 = fit.mtool.penalized$coefficients[1:(p+1), 2]
                  selected_cause1 <- which(coefs_cause1 != 0)
                  selected_cause2 <- which(coefs_cause2 != 0)
                  
                  # Get list of names of selected covariates
                  non_zero_cov_names <- c(paste("covariates.X",
-                                               as.character(sort(union(selected_cause1, selected_cause2))),
+                                               as.character(sort(union(selected_cause1[1:length(selected_cause1) - 1], 
+                                                                       selected_cause2[1:length(selected_cause2) - 1]))),
                                                sep = ""))
+                
+                if((p + 1) %in% selected_cause1 | (p + 1) %in% selected_cause2) {
+                  non_zero_cov_names <- c(non_zero_cov_names, "covariates.time")
+                }
                  
                  # Subset columns of covariates in training and test set by those that were selected by penalized model
                  train_cv$covariates <- train_cv$covariates[, colnames(train_cv$covariates) %in% non_zero_cov_names]
@@ -303,8 +310,6 @@ plot_post_relaxed.multinom_test <- function(cv_object) {
 
 # Define a function to add secondary axis
 add_secondary_axis <- function(p, positions, labels) {
-  print(positions)
-  print(labels)
   n <- length(positions)
   
   if (n != length(labels)) {
@@ -384,7 +389,7 @@ fit_model_lasso <- function(data, regularization = 'l1',
 #'    2) y: a list of response values
 #' @param fit_object Output of \code{fit_model_lasso}
 #' @return Multinomial deviance
-multi_deviance <- function(data, fit_object) {
+multi_deviance_multinomial <- function(data, fit_object) {
   X <- as.matrix(cbind(data$covariates, 1))
   print(head(X))
   print(dim(X))
@@ -473,6 +478,47 @@ multi_deviance_cb <- function(cb_data, fit_object) {
 #' ################################################# Helper functions for multinomial simulation ##################################################
 
 generateDataset = function(p, n) {
+  p = 120
+  n = 400
+  nfolds = 5
+  seed = 2023
+  
+  # Generate covariates 
+  X <- matrix(rnorm(n * p), n, p)
+  
+  # coefficients for each choice
+  X1 <- rep(0, p)
+  X2 <- c(rep(3, p/2), rep(0, p/2))
+  zero_X2 <- which(X2 == 0)
+  
+  X3 <- c(rep(3, p/2), rep(0, p/2))
+  zero_X3 <- which(X3 == 0)
+  
+  
+  # vector of probabilities
+  vProb = cbind(exp(X%*%X1), exp(X%*%X2), exp(X%*%X3))
+  
+  # multinomial draws
+  mChoices <- t(apply(vProb, 1, rmultinom, n = 1, size = 1))
+  dfM <- cbind.data.frame(y = apply(mChoices, 1, function(x) which(x == 1)), X)
+  # Rename covariates 
+  colnames(dfM)[2:(p+1)] <- paste0('x', 1:p)
+  
+  # 0, 1, 2 for levels 
+  Y <- factor(dfM$y-1)
+  
+  # Covariate matrix 
+  X <- as.matrix(dfM[, c(2:(p+1))])
+  
+  # Rename covariates 
+  colnames(X) <- paste0('x', 1:p)
+  
+  train1 = list("covariates" = X, "event_ind" = as.numeric(Y) - 1, "offset" = rep(0, length(Y)), "time" = rep(0, length(Y)))
+  
+  
+  
+  
+  
   beta = c(rep(5, p/2 + 1), rep(0, p/2))
   beta = as.matrix(beta)
   beta_neg = -beta
@@ -497,5 +543,161 @@ generateDataset = function(p, n) {
 }
 
 
+partitionData = function(x, y) {
+  train_index_y = caret::createDataPartition(y, p = 0.80, list = FALSE)
+  
+  x_train = x[train_index_y, -1]
+  y_train = y[train_index_y]
+  
+  x_test = x[-train_index_y, -1]
+  y_test = y[-train_index_y]
+  
+  result = list(x_train = x_train, y_train = y_train,
+                x_test = x_test, y_test = y_test)
+  
+  return(result)
+}
 
 
+fitAll = function(train_data, response, folds = 5, print_time) {
+  # cv.glmnet with LASSO, cv.glmnet relaxed LASSO, and my relaxed implementation fits
+  fit = cv.glmnet(train_data, response, gamma = 0, nfolds = folds, relax = FALSE)
+  relaxed_fit = cv.glmnet(train_data, response, gamma = 0, nfolds = folds, relax = TRUE)
+  my_relaxed_fit = myRelaxedOld(train_data, response, FALSE, folds = folds, print_time)
+  my_relaxed_fit_cv = myRelaxedOld(train_data, response, TRUE, folds = folds, print_time)
+  my_relaxed_new_fit_cv = myRelaxedFinal(train_data, response, folds = folds, print_time)
+  
+  
+  # Save lambda values of interest from cv.glmnet LASSO to use for post LASSO fit
+  lambda_min = fit$lambda.min
+  
+  # Post LASSO fits
+  fit_post_lasso_lambda_min = glmnet(train_data, response, lambda = lambda_min)
+  
+  result = list(cv_glmnet_relaxed = relaxed_fit, my_relaxed = my_relaxed_fit,
+                my_relaxed_cv = my_relaxed_fit_cv, my_relaxed_new = my_relaxed_new_fit_cv, 
+                post_lasso_lambda_min = fit_post_lasso_lambda_min)
+  
+  return(result)
+}
+
+
+
+
+
+
+#' ################################################# Test implementation CV ##################################################
+
+
+###########################################################
+#' Cross-validation function for mtool 
+mtool.multinom.cv_test <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
+                              constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
+                              ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
+  print("CV")
+  surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+  cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
+  # Create case-base dataset
+  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
+  # Default lambda grid
+  if(is.null(lambda_max)) {
+    # Lambda max grid for bisection search
+    if(is.null(initial_max_grid)) {
+      initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
+      fit_val_max <- mclapply(initial_max_grid,
+                              function(lambda_val) {
+                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                            lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
+      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
+      if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
+        warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
+      }
+      upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
+      lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
+      new_max_searchgrid <- seq(lower, upper, precision)
+      fit_val_max <-  mclapply(new_max_searchgrid,
+                               function(lambda_val) {
+                                 fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                             lambda = lambda_val, alpha = alpha,
+                                             unpen_cov = constant_covariates)}, mc.cores = ncores, mc.set.seed = seed)
+      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
+      lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
+    }
+    # else {
+    #   lambda_max = max(initial_max_grid)
+    # }
+  }
+  lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
+  
+  cb_data_train_list = cb_data_train
+  cb_data_train <- as.data.frame(cb_data_train)
+  cb_data_train <- cb_data_train %>%
+    select(-time)
+  # Create folds 
+  folds <- caret::createFolds(factor(cb_data_train$event_ind), k = nfold, list = FALSE)
+  lambda.min <- rep(NA_real_, nfold)
+  all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  non_zero_coefs <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
+  #Perform 10 fold cross validation
+  for(i in 1:nfold){
+    #Segment your data by fold using the which() function 
+    train_cv <- cb_data_train[which(folds != i), ] #Set the training set
+    test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
+    # Create X and Y
+    train_cv <- list("time" = train_cv$time,
+                     "event_ind" = train_cv$event_ind,
+                     "covariates" = train_cv[, grepl("covariates", names(train_cv))],
+                     "offset" = train_cv$offset)
+    # Standardize
+    train_cv$covariates <- as.data.frame(scale(train_cv$covariates, center = T, scale = T))
+    cvs_res <- mclapply(lambdagrid, 
+                        function(lambda_val) {
+                          fit_cbmodel(train_cv, regularization = 'elastic-net',
+                                      lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
+                        }, mc.cores = ncores, mc.set.seed = seed)
+    test_cv <- list("time" = test_cv$covariates.time,
+                    "event_ind" = test_cv$event_ind,
+                    "covariates" = as.matrix(test_cv[, grepl("covariates", names(test_cv))]),
+                    "offset" = test_cv$offset)
+    # Standardize
+    test_cv$covariates <- as.data.frame(scale(test_cv$covariates, center = T, scale = T))
+    mult_deviance <- unlist(lapply(cvs_res, multi_deviance_cb, cb_data = test_cv))
+    all_deviances[, i] <- mult_deviance
+    non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
+    
+    if(i == nfold) {
+      # Return the number of selected covariates when fit on all data
+      all_non_coefs <- mclapply(lambdagrid, 
+                                function(lambda_val) {
+                                  fit.all.data = fit_cbmodel(cb_data_train_list, regularization = 'elastic-net',
+                                                             lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)
+                                  num_non_zero_cov = length(union(which(fit.all.data$coefficients[, 1] != 0),
+                                                                  which(fit.all.data$coefficients[, 2] != 0)))
+                                  num_non_zero_cov
+                                }, mc.cores = ncores, mc.set.seed = seed)
+    }
+    
+    cat("Completed Fold", i, "\n")
+  }
+  mean_dev <- rowMeans(all_deviances)
+  lambda.min <- lambdagrid[which.min(mean_dev)]
+  sel_lambda_min <- non_zero_coefs[which.min(mult_deviance)]
+  if (sel_lambda_min  == 2*constant_covariates) {
+    cat("Null model chosen: choosing first non-null model lambda")
+    lambda.min <- lambdagrid[which.min(non_zero_coefs != 2*constant_covariates)-2]
+  }
+  cv_se <- sqrt(var(mean_dev))
+  dev.1se <- mean_dev[which.min(mean_dev)] + cv_se
+  dev.0.5se <- mean_dev[which.min(mean_dev)] + cv_se/2
+  range.1se <- lambdagrid[which(mean_dev <= dev.1se)]
+  lambda.1se <- max(range.1se)
+  lambda.min1se <- min(range.1se)
+  range.0.5se <- lambdagrid[which((mean_dev <= dev.0.5se))]
+  lambda.0.5se <- max(range.0.5se)
+  lambda.min0.5se <- min(range.0.5se)
+  rownames(all_deviances) <- lambdagrid
+  rownames(non_zero_coefs) <- lambdagrid
+  return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
+              lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances, 
+              coef_grid = all_non_coefs))
+}
