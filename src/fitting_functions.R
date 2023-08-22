@@ -4,7 +4,7 @@
 #' @param cb_data Output of \code{create_cbDataset}
 #' @param fit_object Output of \code{fit_cbmodel}
 #' @return Multinomial deviance
-multi_deviance <- function(cb_data, fit_object) {
+multi_deviance_cb <- function(cb_data, fit_object) {
   X <- as.matrix(cbind(cb_data$covariates, 1))
   fitted_vals <- as.matrix(X %*% fit_object$coefficients)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
@@ -65,13 +65,15 @@ create_cbDataset <- function(surv_obj, cov_matrix, ratio = 5) {
 #' 
 #' @param cb_data Output of \code{create_cbDataset}
 fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
-                        lambda, alpha = 0.5, unpen_cov = 2) {
+                        lambda, alpha = 0.5, unpen_cov = 1) {
   stopifnot(alpha >= 0 && alpha <= 1)
   # Elastic-net reparametrization
   lambda1 <- lambda*alpha
   lambda2 <- 0.5*lambda*(1 - alpha)
   # Prepare covariate matrix with intercept
   X <- as.matrix(cbind(cb_data$covariates, 1))
+  print(head(X))
+  print(head(cb_data$event_ind))
   out <- fit.mtool <- mtool::mtool.MNlogistic(
     X = as.matrix(X),
     Y = cb_data$event_ind,
@@ -107,43 +109,36 @@ covAR1 <- function(p, rho) {
 mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max = NULL, alpha = 1, nfold = 10, 
                               constant_covariates = 2, initial_max_grid = NULL, precision = 0.001, epsilon = .0001, grid_size = 100, plot = FALSE, 
                               ncores = parallelly::availableCores(), seed = NULL, train_ratio = 20) {
-  print("CV")
-  # surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
-  # cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
-  # # Create case-base dataset
-  # cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
-  # # Default lambda grid
-  # if(is.null(lambda_max)) {
-  #   # Lambda max grid for bisection search 
-  #   if(is.null(initial_max_grid)) {
-  #     initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
-  #     fit_val_max <- mclapply(initial_max_grid, 
-  #                             function(lambda_val) {
-  #                               fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-  #                                           lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
-  #     non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
-  #     if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
-  #       warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
-  #     }
-  #     upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
-  #     lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
-  #     new_max_searchgrid <- seq(lower, upper, precision)
-  #     fit_val_max <-  mclapply(new_max_searchgrid, 
-  #                              function(lambda_val) {
-  #                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
-  #                                            lambda = lambda_val, alpha = alpha,
-  #                                            unpen_cov = constant_covariates)}, mc.cores = ncores, mc.set.seed = seed)
-  #     non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
-  #     lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
-  #   } 
-  #   # else {
-  #   #   lambda_max = max(initial_max_grid)
-  #   # }
-  # }
-  cb_data_train = train
+  surv_obj_train <- with(train, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+  cov_train <- as.matrix(cbind(train[, c(grepl("X", colnames(train)))], time = log(train$ftime)))
+  # Create case-base dataset
+  cb_data_train <- create_cbDataset(surv_obj_train, cov_train, ratio =  train_ratio)
+  # Default lambda grid
+  if(is.null(lambda_max)) {
+    # Lambda max grid for bisection search 
+    if(is.null(initial_max_grid)) {
+      initial_max_grid <-  c(0.9, 0.5, 0.1, 0.07, 0.05, 0.01, 0.009, 0.005)
+      fit_val_max <- mclapply(initial_max_grid, 
+                              function(lambda_val) {
+                                fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                            lambda = lambda_val, alpha = alpha, unpen_cov = constant_covariates)}, mc.cores = ncores)
+      non_zero_coefs <-  unlist(lapply(fit_val_max, function(x) {return(x$no_non_zero)}))
+      if(!isTRUE(any(non_zero_coefs == (constant_covariates*2)))){
+        warning("Non-zero coef value not found in default grid. Re-run function and specify initial grid")
+      }
+      upper <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]-1]
+      lower <- initial_max_grid[which(non_zero_coefs > (constant_covariates*2 + 1))[1]]
+      new_max_searchgrid <- seq(lower, upper, precision)
+      fit_val_max <-  mclapply(new_max_searchgrid, 
+                               function(lambda_val) {
+                                 fit_cbmodel(cb_data_train, regularization = 'elastic-net',
+                                             lambda = lambda_val, alpha = alpha,
+                                             unpen_cov = constant_covariates)}, mc.cores = ncores, mc.set.seed = seed)
+      non_zero_coefs <-  unlist(mclapply(fit_val_max, function(x) {return(x$no_non_zero)}, mc.cores = ncores, mc.set.seed = seed))
+      lambda_max <- new_max_searchgrid[which.min(non_zero_coefs)]
+    }
+  }
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
-  print(lambdagrid)
-  
   cb_data_train <- as.data.frame(cb_data_train)
   cb_data_train <- cb_data_train %>%
     select(-time)
@@ -175,7 +170,7 @@ mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max 
                     "offset" = test_cv$offset)
     # Standardize
     test_cv$covariates <- as.data.frame(scale(test_cv$covariates, center = T, scale = T))
-    mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
+    mult_deviance <- unlist(lapply(cvs_res, multi_deviance_cb, cb_data = test_cv))
     all_deviances[, i] <- mult_deviance
     non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
     cat("Completed Fold", i, "\n")
@@ -201,6 +196,7 @@ mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max 
   return(list(lambda.min = lambda.min,  non_zero_coefs = non_zero_coefs, lambda.min1se = lambda.min1se, lambda.min0.5se = lambda.min0.5se, 
               lambda.1se = lambda.1se, lambda.0.5se = lambda.0.5se, cv.se = cv_se, lambdagrid = lambdagrid, deviance_grid = all_deviances))
 }
+
 
 
 

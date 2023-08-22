@@ -154,10 +154,13 @@ cov_val <- cbind(test_surv[, c(grepl("X", colnames(test_surv)))], time = log(tes
 # Case-base dataset
 cb_data_val <- create_cbDataset(surv_obj_val, as.matrix(cov_val), ratio = 10)
 
+cv.lambda <- mtool.multinom.cv(train_surv, seed = seed, nfold = nfolds, epsilon = .001,
+                               alpha = 1)
 
 cv.lambda_test <- mtool.multinom.cv_test(train_surv, seed = seed, nfold = nfolds, epsilon = .001,
                                alpha = 1)
 
+plot_cv.multinom(cv.lambda)
 
 plot_post_relaxed.multinom_test(cv.lambda_test)
 ```
