@@ -592,14 +592,14 @@ multinom.relaxed_enet_nnet <- function(train, regularization = 'elastic-net', la
   lambdagrid <- rev(round(exp(seq(log(lambda_max), log(lambda_max*epsilon), length.out = grid_size)), digits = 10))
   print(lambdagrid)
   
-  cb_data_train = train
-  cb_data_train <- as.data.frame(cb_data_train)
-  cb_data_train <- cb_data_train %>%
-    select(-time)
+  #cb_data_train = train
+  #cb_data_train <- as.data.frame(cb_data_train)
+  #cb_data_train <- cb_data_train %>%
+  #  select(-time)
   
-
+ 
   # Create folds 
-  folds <- caret::createFolds(y = cb_data_train$event_ind, k = nfold, list = FALSE)
+  folds <- caret::createFolds(y = train$y, k = nfold, list = FALSE)
   lambda.min <- rep(NA_real_, nfold)
   all_deviances <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
   non_zero_coefs_matrix <- matrix(NA_real_, nrow = length(lambdagrid), ncol = nfold)
@@ -612,19 +612,22 @@ multinom.relaxed_enet_nnet <- function(train, regularization = 'elastic-net', la
   #Perform 10 fold cross validation
   for(i in 1:nfold){
     
-    train_cv <- cb_data_train[which(folds != i), ] #Set the training set
-    test_cv <- cb_data_train[which(folds == i), ] #Set the validation set
+    train_cv <- train[which(folds != i), ] #Set the training set
+    test_cv <- train[which(folds == i), ] #Set the validation set
     # Create X and Y
-    train_cv <- list("time" = train_cv$time,
-                      "event_ind" = train_cv$event_ind,
-                      "covariates" = train_cv[, grepl("covariates", names(train_cv))],
-                      "offset" = train_cv$offset)
+    # Standardize
+    train_cv <- scale(train_cv, center = T, scale = T)
+    test_cv <- scale(test_cv, center = T, scale = T)
     
-    test_cv <- list("time" = test_cv$time,
-                     "event_ind" = test_cv$event_ind,
-                     "covariates" = test_cv[, grepl("covariates", names(test_cv))],
-                     "offset" = test_cv$offset)
+    #Segment your data by fold using the which() function 
+    X_train <- as.matrix(X[which(folds != i), ]) #Set the training set
+    X_val <- as.matrix(X[which(folds == i), ]) #Set the validation set
+    Y_train <- as.numeric(Y[which(folds != i)]) - 1 #Set the training set
+    Y_val <- as.numeric(Y[which(folds == i)]) - 1 #Set the validation set
     
+    # Standardize
+    X_train <- scale(X_train, center = T, scale = T)
+    X_val <- scale(X_val, center = T, scale = T)
     # #Segment your data by fold using the which() function 
     # X_train <- as.matrix(X[which(folds != i), ]) #Set the training set
     # X_val <- as.matrix(X[which(folds == i), ]) #Set the validation set

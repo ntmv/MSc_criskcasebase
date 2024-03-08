@@ -1,13 +1,9 @@
 ##################### Prediction function for casebase penalized model ################
-predict_CompRisk <- function(object, newdata = NULL) {
-  ttob <- terms(object)
-  X <- model.matrix(delete.response(ttob), newdata,
-                    xlev = object@xlevels)
-  coeffs <- matrix(coef(object), nrow = ncol(X),
-                   byrow = TRUE)
-  preds <- X %*% coeffs
+predict_CompRisk_penalized <- function(fit_object, cb_data, newdata = NULL) {
+  X <- as.matrix(cbind(cb_data$covariates, 1))
+  preds <- as.matrix(X %*% fit_object$coefficients)
   colnames(preds) <- paste0("log(mu[,",
-                            seq(2, length(object@typeEvents)),
+                            seq(2, length(3)),
                             "]/mu[,1])")
   return(preds)
 }
@@ -15,22 +11,14 @@ predict_CompRisk <- function(object, newdata = NULL) {
 
 ########################## Survival analysis performance metrics #############
 ### Cause-specific cumulative incidence function for penalized case-base fit
-absoluteRisk.CompRisk <- function(object, time, newdata,
+absoluteRisk.penalized <- function(fit_object, cb_data, time, newdata,
                                   method = c("numerical", "montecarlo"),
                                   nsamp = 100, onlyMain = TRUE,
                                   type = c("CI", "survival"),
                                   addZero = TRUE) {
   method <- match.arg(method)
   type <- match.arg(type)
-  
-  if (missing(newdata)) {
-    # Should we use the whole case-base dataset or the original one?
-    check_original_data(object@originalData)
-    newdata <- object@originalData
-    unselectTime <- (names(newdata) != object@timeVar)
-    newdata <- subset(newdata, select = unselectTime)
-  }
-  typeEvents <- object@typeEvents
+  typeEvents <- c(0, 1, 2)
   ###################################################
   # In competing risks, we can get a cumulative
   # incidence function using a nested double integral
@@ -69,10 +57,10 @@ absoluteRisk.CompRisk <- function(object, time, newdata,
       # Create data.table for prediction
       newdata2 <- data.table::data.table(current_obs)
       newdata2 <- newdata2[rep(1, length(knots))]
-      newdata2[, object@timeVar := knots]
+      newdata2[, ftime := knots]
       newdata2[, "offset" := 0]
       # Compute all values for all hazards
-      lambdas <- exp(predict_CompRisk(object, newdata2))
+      lambdas <- exp(predict_CompRisk_penalized(fit_object, cb_data, newdata2))
       lambdas[which(lambdas %in% c(Inf, -Inf))] <- 0
       OverallLambda <- rowSums(lambdas)
       survFunction <- exp(-trap_int(knots, OverallLambda))
@@ -172,20 +160,6 @@ absoluteRisk.CompRisk <- function(object, time, newdata,
   
 }
 
-# #' @rdname absoluteRisk
-# #' @export
-absoluteRisk.CompRiskGlmnet <- function(object, time, newdata,
-                                        method = c("numerical", "montecarlo"),
-                                        nsamp = 100, onlyMain = TRUE,
-                                        s = c("lambda.1se", "lambda.min"),
-                                        type = c("CI", "survival"),
-                                        addZero = TRUE, ...) {
-  # The current implementation doesn't work
-  stop(paste("object is of class", class(object),
-             "\nabsoluteRisk should be used with an object of class glm,",
-             "cv.glmnet, gbm, or CompRisk"),
-       call. = TRUE)
-}
 
 #' @importFrom stats coef
 predict_CompRisk <- function(object, newdata = NULL) {
@@ -204,10 +178,7 @@ predict_CompRisk <- function(object, newdata = NULL) {
   return(preds)
 }
 
-
-
-
-
+#########################################
 # Streamlined version of pracma::cumtrapz
 trap_int <- function(x, y) {
   x <- as.matrix(c(x))
@@ -218,3 +189,15 @@ trap_int <- function(x, y) {
   ct <- apply(dt * (y[1:(m - 1), ] + y[2:m, ]), 2, cumsum)
   return(rbind(0, ct))
 }
+#####################################################################
+### Cause-specific cumulative incidence function for penalized case-base fit
+absoluteRisk.penalized <- function(object, time, newdata,
+                                  method = c("numerical", "montecarlo"),
+                                  nsamp = 100, onlyMain = TRUE,
+                                  type = c("CI", "survival"),
+                                  addZero = TRUE) {
+  method <- match.arg(method)
+  type <- match.arg(type)
+  typeEvents <- c(0, 1, 2)
+
+
