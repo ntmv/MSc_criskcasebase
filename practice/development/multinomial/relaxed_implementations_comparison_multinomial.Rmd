@@ -1,0 +1,143 @@
+---
+title: "Relaxed Lasso multinomial LR implementations comparison with multinomial data"
+author: "Alexander Romanus"
+date: "`r Sys.Date()`"
+knit: (function(inputFile, encoding) { 
+      out_dir <- 'development_results/implementation_comparison_knits';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, paste(runif(1), 'relaxed_simulation_multinomial.html'))) })
+output:
+  html_document: 
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(casebase)
+library(future.apply)
+library(glmnet)
+#library(mtool)
+library(parallelly)
+library(timereg)
+library(parallel)
+library(tictoc)
+library(tidyverse)
+#library(riskRegression)
+library(cmprsk)
+library(survsim)
+library(caret)
+library(Matrix)
+library(dplyr)
+library(ggplot2)
+library(grid)
+
+# Helper functions 
+source("../../../src/practice_relaxed_implementations.R")
+source("../../../src/fitting_functions.R")
+```
+
+
+# Setup n > p (n = 400)
+``` {r setup-simulation,echo=FALSE}
+p = 20
+n = 400
+nfolds = 5
+seed = 2023
+
+# Generate covariates 
+X <- matrix(rnorm(n * p), n, p)
+
+# coefficients for each choice
+X1 <- rep(0, p)
+X2 <- c(rep(3, p/2), rep(0, p/2))
+zero_X2 <- which(X2 == 0)
+
+X3 <- c(rep(3, p/2), rep(0, p/2))
+zero_X3 <- which(X3 == 0)
+
+
+# vector of probabilities
+vProb = cbind(exp(X%*%X1), exp(X%*%X2), exp(X%*%X3))
+
+# multinomial draws
+mChoices <- t(apply(vProb, 1, rmultinom, n = 1, size = 1))
+dfM <- cbind.data.frame(y = apply(mChoices, 1, function(x) which(x == 1)), X)
+# Rename covariates 
+colnames(dfM)[2:(p+1)] <- paste0('x', 1:p)
+
+# 0, 1, 2 for levels 
+Y <- factor(dfM$y-1)
+
+# Covariate matrix 
+X <- as.matrix(dfM[, c(2:(p+1))])
+
+# Rename covariates 
+colnames(X) <- paste0('x', 1:p)
+
+train1 = list("covariates" = X, "event_ind" = as.numeric(Y) - 1, "offset" = rep(0, length(Y)), "time" = rep(0, length(Y)))
+```
+
+
+# Check cv.glmnet(relax=TRUE) vs mtool relaxed implementation on multinomial data
+
+``` {r compare-implementations, echo=FALSE, message=FALSE}
+alpha <- 1
+
+#glmnet relax = TRUE
+set.seed(seed)
+fit.glmnet.relaxed <- glmnet::cv.glmnet(
+  x = X, y = Y,
+  family = "multinomial",
+  intercept = TRUE,
+  type.multinomial = "grouped",  # same sparsity pattern for all outcome classes
+  alpha = 1, nfolds = 10,
+  relax = TRUE, gamma = 0)
+# Elastic-net reparametrization
+# mtool
+glmnet_lambda_max = fit.glmnet.relaxed$lambda[1]
+
+fit.mtool.relaxed_nnet_old_mtool <- multinom.relaxed_lasso_nnet_old_mtool(train = train1, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.001)
+
+
+fit.mtool.relaxed_mtool_old_mtool <- multinom.relaxed_lasso_mtool_old_mtool(train = train1, lambda_max = glmnet_lambda_max, alpha = 1, seed = seed, epsilon = 0.001, gamma = 0.009)
+
+
+fit.mtool.relaxed_correct_coefs_old_mtool <- multinom.relaxed_lasso_correct_coefs_old_mtool(train = dfM, lambda_max = glmnet_lambda_max,
+                                                  gamma = 0.009, seed = seed, epsilon = 0.001)
+
+
+fit.mtool.relaxed_correct_coefs_new_mtool <- multinom.relaxed_lasso_correct_coefs_new_mtool(train = dfM, lambda_max = glmnet_lambda_max,
+                                                  gamma = 0.009, seed = seed, epsilon = 0.001)
+
+``` 
+## Glmnet relaxed
+```{r plot-glmnet}
+plot(fit.glmnet.relaxed)
+```
+
+## My implementation with unpenalized fit on subset using nnet using old mtool (i.e. with non-zero lambda2 value)
+```{r plot-unpenalized-nnet}
+plot_post_relaxed.multinom_test(fit.mtool.relaxed_nnet_old_mtool)
+```
+
+
+
+## My implementation with penalized fit on subset using mtool, gamma = 0.009, using old mtool (i.e. with non-zero lambda2 value)
+```{r plot-penalized-normal-gamma-mine}
+plot_post_relaxed.multinom_test(fit.mtool.relaxed_mtool_old_mtool)
+```
+
+
+## New implementation with penalized fit on subset using mtool, gamma = 0.009, using old mtool (i.e. with non-zero lambda2 value)
+### Correctly subsets coefficients
+```{r plot-penalized-normal-gamma-new-implementation-old-mtool-correct-coefficients}
+print(plot_post_relaxed.multinom_test(fit.mtool.relaxed_correct_coefs_old_mtool))
+```
+
+
+## Nirupama's imlementation with penalized fit on subset using mtool, gamma = 0.009, using new mtool (i.e. lambda2 = 0)
+### Correctly subsets coefficients
+```{r plot-penalized-normal-gamma-new-implementation-new-mtool-correct-coefficients}
+print(plot_post_relaxed.multinom_test(fit.mtool.relaxed_correct_coefs_new_mtool))
+```

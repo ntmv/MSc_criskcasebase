@@ -1,0 +1,11 @@
+"","TP","TN","FP","FN","Sensitivity","Specificity","MCC","Coefficient_Bias"
+"cox.lambda.min_cause1",9,10,0,1,0.9,1,0.904534033733291,11.4274926167001
+"cox.lambda.min_cause2",10,3,7,0,1,0.3,0.420084025208403,0.0525467019461373
+"casebase.cv.lambda.min_cause1",9,7,3,1,0.9,0.7,0.612372435695795,11.2350864921323
+"casebase.cv.lambda.min_cause2",10,6,4,0,1,0.6,0.654653670707977,0.356684845801494
+"casebase.relaxed.lambda.min.no.pen_cause1",9,7,3,1,0.9,0.7,0.612372435695795,11.2593054095042
+"casebase.relaxed.lambda.min.no.pen_cause2",10,7,3,0,1,0.7,0.733799385705343,0.360998555440782
+"casebase.relaxed.lambda.min.small.pen_cause1",8,10,0,2,0.8,1,0.816496580927726,11.7652606877605
+"casebase.relaxed.lambda.min.small.pen_cause2",5,9,1,5,0.5,0.9,0.436435780471985,0.467233139712671
+"casebase.relaxed.lambda.min.sig.pen_cause1",9,7,3,1,0.9,0.7,0.612372435695795,11.2594342738084
+"casebase.relaxed.lambda.min.sig.pen_cause2",10,7,3,0,1,0.7,0.733799385705343,0.360973829005937

@@ -1,0 +1,262 @@
+---
+title: "Relaxed Lasso casebase simulation with survival data"
+author: "Alexander Romanus"
+knit: (function(inputFile, encoding) { 
+      out_dir <- 'development_results/final_implementation_knits';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, paste(runif(1), 'relaxed_simulation_survival.html'))) })
+output:
+  html_document: 
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(casebase)
+library(future.apply)
+library(glmnet)
+library(mtool)
+library(parallelly)
+library(timereg)
+library(parallel)
+library(tictoc)
+library(tidyverse)
+library(cmprsk)
+library(survsim)
+library(caret)
+library(Matrix)
+library(dplyr)
+library(knitr)
+
+
+source("../../../src/final_relaxed_implementation.R")
+source("../../../src/fitting_functions.R")
+```
+
+
+# cv.glmnet() using cox family vs mtool casebase relaxed implementation on survival data
+
+### Setup n > p (n = 400, p = 120)
+``` {r setup-simulation, echo=FALSE}
+p = 120
+n = 400
+nfolds = 5
+seed = 2023
+
+
+num_true <- p/2
+nu_ind <- seq(num_true)
+
+beta1 <- c(rep(5, p/2), rep(0, p/2))
+beta2 <- c(rep(-1, p/2), rep(0, p/2))
+
+# Simulate data
+sim.data <- cause_hazards_sim(n = n, p = p,  
+                                  beta1 = beta1, beta2 = beta2, rate_cens = 0.15, 
+                                  h1 = 0.55, h2 = 0.15, gamma1 = 1.5, gamma2 = 1.5)
+
+
+# Censoring proportion
+cen.prop <- c(prop.table(table(sim.data$fstatus)), 0, 0, 0, 0)
+
+# train_surving-test_surv split 
+# We only do this (instead of generating datasets for train_surv and test_surv like Anthony mentioned because it is faster computationally 
+# as casebase resamples) + proportion of censoring can be quite random in each run of the simulation so we want to maintain the same in validation and test_surv set
+train_surv.index <- caret::createDataPartition(sim.data$fstatus, p = 0.75, list = FALSE)
+train_surv <- sim.data[train_surv.index,]
+test_surv <- sim.data[-train_surv.index,]
+
+test_list = list("time" = test_surv$ftime,
+                 "event_ind" = test_surv$fstatus,
+                 "covariates" = as.matrix(test_surv[, paste("X", as.character(seq(1:p)), sep = "")]),
+                 "offset" = test_surv$offset)  
+
+# test_surv set
+surv_obj_test <- with(test_surv, Surv(ftime, as.numeric(fstatus), type = "mstate"))
+
+# Covariance matrix
+cov_test <- cbind(test_surv[, c(grepl("X", colnames(test_surv)))], time = log(test_surv$ftime))
+
+# Case-base dataset
+cb_data_test <- create_cbDataset(surv_obj_test, as.matrix(cov_test), ratio = 10)
+```
+
+
+## Cox model
+### Cause 1
+``` {r test_surv-relaxed-lasso-final-cox-1, echo=FALSE}
+######################### Cause-1 #########################################
+  # Censor competing event
+  y_train_surv <- Surv(time = train_surv$ftime, event = train_surv$fstatus == 1)
+  
+  x_train_surv <- model.matrix(~ . -ftime -fstatus, data = train_surv)[, -1] 
+  
+  # Censor competing event
+  y_test_surv <- Surv(time = test_surv$ftime, event = test_surv$fstatus == 1)
+  
+  x_test_surv <- model.matrix(~ . -ftime -fstatus, data = test_surv)[, -1] 
+  
+  # Fit cause-specific cox model with glmnet on train_surving set 
+  cox_mod1 <- cv.glmnet(x = x_train_surv, y = y_train_surv, family = "cox", alpha = 1, folds = nfolds)
+  
+  # Fit on validation set 
+  cox_val_min1 <- glmnet(x = x_test_surv, y = y_test_surv, family = "cox", alpha = 1, 
+                        lambda = cox_mod1$lambda.min)
+  
+  cc_min1 <- coef(cox_val_min1)
+  
+  res_cox_min1 <- varsel_perc(cc_min1, beta1)
+  
+  plot(cox_mod1)
+```
+
+## Cox model
+### Cause 2        
+``` {r test_surv-relaxed-lasso-final-cox-2, echo=FALSE}
+########################## Cause 2 #####################################
+# Censor competing event
+y_train_surv <- Surv(time = train_surv$ftime, event = train_surv$fstatus == 2)
+
+x_train_surv <- model.matrix(~ . -ftime -fstatus, data = train_surv)[, -1] 
+
+# Censor competing event
+y_test_surv <- Surv(time = test_surv$ftime, event = test_surv$fstatus == 2)
+
+x_test_surv <- model.matrix(~ . -ftime -fstatus, data = test_surv)[, -1] 
+
+# Fit cause-specific cox model with glmnet on train_surving set
+cox_mod2 <- cv.glmnet(x = x_train_surv, y = y_train_surv, family = "cox", alpha = 1, folds = nfolds)
+
+# Fit on validation set 
+cox_val_min2 <- glmnet(x = x_test_surv, y = y_test_surv, family = "cox", alpha = 1, 
+                      lambda = cox_mod2$lambda.min)
+
+cc_min2 <- coef(cox_val_min2)
+
+# Function to output variable selection performance metrics
+res_cox_min2 <- varsel_perc(cc_min2, beta2)
+
+glmnet_cox_coefs = list("coefficients" = as.matrix(cbind(cc_min1, cc_min2)))
+
+# Test multi-deviance
+dev_cox <- multi_deviance_final(data = test_list, fit_object = glmnet_cox_coefs, cox = TRUE)
+
+plot(cox_mod2)
+```
+
+## Casebase model fit with lasso
+``` {r test_surv-casebase-lasso-cv, echo=TRUE, message=FALSE, results = 'hide'}
+########################## Fit casebase model with lasso #################################
+# Lasso fit
+lasso.lambda <- mtool.multinom.cv(train_surv, seed = seed, nfold = nfolds, regularization = "l1",
+                               alpha = 1)
+
+# Test set fit with lambda.min
+fit_lambda_min_lasso <- fit_model(cb_data_test, regularization = 'l1',
+                              lambda = lasso.lambda$lambda.min , alpha = 1, unpen_cov = 2)
+
+coef_val1 <- fit_lambda_min_lasso$coefficients[1:p, 1]
+coef_val2 <- fit_lambda_min_lasso$coefficients[1:p, 2]
+
+res_lambda_min1_lasso <- varsel_perc(coef_val1, beta1)
+res_lambda_min2_lasso <- varsel_perc(coef_val2, beta2)
+
+# Test multi-deviance
+dev_cb_mtool_lasso <- multi_deviance_final(data = cb_data_test, fit_object = fit_lambda_min_lasso)
+
+plot_cv.multinom(lasso.lambda)
+```
+
+## mtool casebase model fit with Relaxed Lasso with no additional penalization (gamma = 0)
+``` {r test_surv-casebase-relaxed-lasso-no-pen, echo=TRUE, message=FALSE, results = 'hide'}
+########################## Fit casebase model with relaxed LASSO#################################
+# Relaxed Lasso with no penalization
+res_relaxed <- multinomial_casebase_relaxed_lasso(train_surv, nfold = nfolds, seed = seed,
+                               alpha = 1, gamma = 0)
+
+# Test set fit with lambda.min
+fit_lambda_min_relaxed_no_pen <- fit_model(cb_data_test, regularization = 'l1',
+                              lambda = res_relaxed$lambda.min, alpha = 1, unpen_cov = 2)
+
+coef_val1 <- fit_lambda_min_relaxed_no_pen$coefficients[1:p, 1]
+coef_val2 <- fit_lambda_min_relaxed_no_pen$coefficients[1:p, 2]
+
+res_lambda_min1_relaxed_no_pen <- varsel_perc(coef_val1, beta1)
+res_lambda_min2_relaxed_no_pen <- varsel_perc(coef_val2, beta2)
+
+# Test multi-deviance
+dev_cb_mtool_relaxed_no_pen <- multi_deviance_final(data = cb_data_test, fit_object = fit_lambda_min_relaxed_no_pen)
+
+plot_post_relaxed(res_relaxed)
+```
+
+## mtool casebase model fit with Relaxed Lasso with small additional penalization (gamma = 0.00001)
+``` {r test_surv-casebase-relaxed-lasso-small-pen, echo=FALSE, message=FALSE, results = 'hide'}
+########################## Fit casebase model with relaxed LASSO#################################
+res_relaxed_small_pen <- multinomial_casebase_relaxed_lasso(train_surv, nfold = nfolds, seed = seed,
+                               alpha = 1, gamma = 0.00001)
+
+# Relaxed Lasso with small penalization
+# Lambda.min
+fit_lambda_min_relaxed_small_pen <- fit_model(cb_data_test, regularization = 'l1',
+                              lambda = res_relaxed_small_pen$lambda.min , alpha = 1, unpen_cov = 2)
+
+coef_val1 <- fit_lambda_min_relaxed_small_pen$coefficients[1:p, 1]
+coef_val2 <- fit_lambda_min_relaxed_small_pen$coefficients[1:p, 2]
+
+res_lambda_min1_relaxed_small_pen <- varsel_perc(coef_val1, beta1)
+res_lambda_min2_relaxed_small_pen <- varsel_perc(coef_val2, beta2)
+
+# Test multi-deviance
+dev_cb_mtool_relaxed_small_pen <- multi_deviance_final(data = cb_data_test, fit_object = fit_lambda_min_relaxed_small_pen)
+
+
+plot_post_relaxed(res_relaxed_small_pen)
+```
+
+## mtool casebase model fit with Relaxed Lasso with significant additional penalization (gamma = 0.001)
+``` {r test_surv-casebase-relaxed-lasso-sig-pen, echo=FALSE, message=FALSE, results = 'hide'}
+########################## Fit casebase model with relaxed LASSO#################################
+res_relaxed_sig_pen <- multinomial_casebase_relaxed_lasso(train_surv, nfold = nfolds, seed = seed,
+                               alpha = 1, gamma = 0.001)
+
+# Relaxed Lasso with small penalization
+# Test set fit with lambda.min
+fit_lambda_min_relaxed_sig_pen <- fit_model(cb_data_test, regularization = 'l1',
+                              lambda = res_relaxed_sig_pen$lambda.min , alpha = 1, unpen_cov = 2)
+
+coef_val1 <- fit_lambda_min_relaxed_sig_pen$coefficients[1:p, 1]
+coef_val2 <- fit_lambda_min_relaxed_sig_pen$coefficients[1:p, 2]
+
+res_lambda_min1_relaxed_sig_pen <- varsel_perc(coef_val1, beta1)
+res_lambda_min2_relaxed_sig_pen <- varsel_perc(coef_val2, beta2)
+
+# Test multi-deviance
+dev_cb_mtool_relaxed_sig_pen <- multi_deviance_final(data = cb_data_test, fit_object = fit_lambda_min_relaxed_sig_pen)
+
+
+plot_post_relaxed(res_relaxed_sig_pen)
+```
+
+## Final results
+``` {r results, echo=FALSE, message=FALSE}
+Res <- rbind(res_cox_min1, res_cox_min2, res_lambda_min1_lasso, res_lambda_min2_lasso,
+                 res_lambda_min1_relaxed_no_pen, res_lambda_min2_relaxed_no_pen, res_lambda_min1_relaxed_small_pen, res_lambda_min2_relaxed_no_pen, 
+                 res_lambda_min1_relaxed_no_pen, res_lambda_min2_relaxed_no_pen)
+    
+rownames(Res) <- c("cox.lambda.min_cause1", "cox.lambda.min_cause2",
+                       "casebase.lasso.lambda.min_cause1", "casebase.lasso.lambda.min_cause2",
+                       "casebase.relaxed.lambda.min.no.pen_cause1", "casebase.relaxed.lambda.min.no.pen_cause2",
+                       "casebase.relaxed.lambda.min.small.pen_cause1", "casebase.relaxed.lambda.min.small.pen_cause2",
+                       "casebase.relaxed.lambda.min.sig.pen_cause1", "casebase.relaxed.lambda.min.sig.pen_cause2")
+
+devs <- rbind(dev_cb_mtool_lasso, dev_cb_mtool_relaxed_no_pen, dev_cb_mtool_relaxed_small_pen, dev_cb_mtool_relaxed_sig_pen)
+    
+rownames(devs) <- c("casebase.lasso.lambda.min", "casebase.relaxed.lambda.min.no.pen",
+                    "casebase.relaxed.lambda.min.small.pen", "casebase.relaxed.lambda.min.sig.pen")
+colnames(devs) <- c("Prediction deviance")
+
+kable(Res)
+kable(devs)
+```

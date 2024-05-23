@@ -1,0 +1,78 @@
+---
+title: "Relaxed Lasso linear regression simulation"
+author: "Alexander Romanus"
+date: "`r Sys.Date()`"
+knit: (function(inputFile, encoding) { 
+      out_dir <- 'development_results/simulation_knits';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, paste(runif(1), 'relaxed_simulation.html'))) })
+output:
+  html_document: 
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(casebase)
+library(future.apply)
+library(glmnet)
+#library(mtool)
+library(parallelly)
+library(timereg)
+library(parallel)
+library(tictoc)
+library(tidyverse)
+#library(riskRegression)
+library(cmprsk)
+library(survsim)
+library(caret)
+library(Matrix)
+library(dplyr)
+
+# Helper functions 
+source("../../src/linear_simulation_helper_functions.R")
+source("../../src/practice_relaxed_implementations.R")
+```
+
+# Check final implementation
+``` {r test-relaxed-lasso-final}
+p = 120
+n = 400
+
+dataset = generateDataset(p, n)
+partitioned_data = partitionData(dataset$X, dataset$Y)
+training_data = partitioned_data[c("x_train", "y_train")]=
+
+result = myRelaxedFinal(training_data$x_train, training_data$y_train)
+relaxed_fit = cv.glmnet(training_data$x_train, training_data$y_train, gamma = 0, nfolds = 5, relax = TRUE)
+
+plot = plot_myRelaxed(result)
+plot(relaxed_fit)
+plot
+```
+
+# Run simulation
+``` {r run-sim, warning = FALSE, echo = FALSE, eval=FALSE}
+N = 5
+tic()
+sim_results = runSim(20, 400, N, FALSE)
+cat(paste("Time to compute ", as.character(N), " iterations: ", toc()))
+```
+
+
+# Simulation results
+
+## Coefficient Biases
+
+``` {r resulting-coefficients, echo=FALSE, eval=FALSE}
+formatCoefficientBiasTable(sim_results, p)
+```
+
+## Average Test MSEs
+
+``` {r resulting-MSEs, echo=FALSE, eval=FALSE}
+formatAverageTestMSETable(sim_results)
+```
+
+

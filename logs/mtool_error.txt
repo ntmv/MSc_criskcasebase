@@ -1,0 +1,80 @@
+  ✔  checking for file ‘/private/var/folders/wd/ykcm825s1_q8b6h4l_kczjx00000gn/T/RtmpIw5JYk/file50d37cb70d53/mtool/DESCRIPTION’
+  ─  preparing ‘mtool’:
+   checking DESCRIPTION meta-information ...  ✔  checking DESCRIPTION meta-information
+─  cleaning src
+  ─  installing the package to process help pages
+           -----------------------------------
+─  installing *source* package ‘mtool’ ...
+   ** using staged installation
+   ** libs
+   clang++ -arch arm64 -std=gnu++14 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.2-arm64/Resources/library/Rcpp/include' -I'/Library/Frameworks/R.framework/Versions/4.2-arm64/Resources/library/RcppArmadillo/include' -I/opt/R/arm64/include   -I../inst/include/ -I../inst/include/decomp -I../inst/include/dictLearn -I../inst/include/linalg -I../inst/include/prox -DNDEBUG -DREMOVE_ -fPIC  -falign-functions=64 -Wall -g -O2  -Wall -pedantic -c RcppExports.cpp -o RcppExports.o
+   clang++ -arch arm64 -std=gnu++14 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.2-arm64/Resources/library/Rcpp/include' -I'/Library/Frameworks/R.framework/Versions/4.2-arm64/Resources/library/RcppArmadillo/include' -I/opt/R/arm64/include   -I../inst/include/ -I../inst/include/decomp -I../inst/include/dictLearn -I../inst/include/linalg -I../inst/include/prox -DNDEBUG -DREMOVE_ -fPIC  -falign-functions=64 -Wall -g -O2  -Wall -pedantic -c main.cpp -o main.o
+   In file included from main.cpp:5:
+   In file included from ../inst/include/spams.h:25:
+   In file included from ../inst/include/dictLearn/dicts.h:36:
+   In file included from ../inst/include/prox/fista.h:24:
+   ../inst/include/prox/project.h:2044:9: warning: variable 'num4' set but not used [-Wunused-but-set-variable]
+      long num4=0;
+           ^
+   ../inst/include/prox/project.h:2041:9: warning: variable 'num1' set but not used [-Wunused-but-set-variable]
+      long num1=0;
+           ^
+   ../inst/include/prox/project.h:2043:9: warning: variable 'num3' set but not used [-Wunused-but-set-variable]
+      long num3=0;
+           ^
+   ../inst/include/prox/project.h:2042:9: warning: variable 'num2' set but not used [-Wunused-but-set-variable]
+      long num2=0;
+           ^
+../inst/include/prox/project.h:2133:9: warning: variable 'num4' set but not used [     ../inst/include/prox/project.h:2133:9: warning: variable 'num4' set but not used [-Wunused-but-set-variable]
+      long num4=0;
+           ^
+   ../inst/include/prox/project.h:2130:9: warning: variable 'num1' set but not used [-Wunused-but-set-variable]
+      long num1=0;
+           ^
+   ../inst/include/prox/project.h:2131:9: warning: variable 'num2' set but not used [-Wunused-but-set-variable]
+      long num2=0;
+           ^
+   ../inst/include/prox/project.h:2132:9: warning: variable 'num3' set but not used [-Wunused-but-set-variable]
+      long num3=0;
+           ^
+   8 warnings generated.
+   clang++ -arch arm64 -std=gnu++14 -dynamiclib -Wl,-headerpad_max_install_names -undefined dynamic_lookup -single_module -multiply_defined suppress -L/Library/Frameworks/R.framework/Resources/lib -L/opt/R/arm64/lib -o mtool.so RcppExports.o main.o -L/Library/Frameworks/R.framework/Resources/lib -lRlapack -L/Library/Frameworks/R.framework/Resources/lib -lRblas -L/opt/R/arm64/gfortran/lib/gcc/aarch64-apple-darwin20.6.0/12.0.1 -L/opt/R/arm64/gfortran/lib -lgfortran -lemutls_w -lquadmath -F/Library/Frameworks/R.framework/.. -framework R -Wl,-framework -Wl,CoreFoundation
+   ld: warning: directory not found for option '-L/opt/R/arm64/gfortran/lib/gcc/aarch64-apple-darwin20.6.0/12.0.1'
+   ld: warning: directory not found for option '-L/opt/R/arm64/gfortran/lib'
+   ld: library not found for -lgfortran
+   clang: error: linker command failed with exit code 1 (use -v to see invocation)
+   make: *** [mtool.so] Error 1
+   ERROR: compilation failed for package ‘mtool’
+─  removing ‘/private/var/folders/wd/ykcm825s1_q8b6h4l_kczjx00000gn/T/RtmpiJ2JWV/Rinst7e1d419e1dc2/mtool’
+         -----------------------------------
+     ERROR: package installation failed
+
+<system_command_status_error/rlib_error_3_0/rlib_error/error>
+Error in `(function (command = NULL, args = character(), error_on_status = TRUE, …`:
+! System command 'R' failed
+---
+Exit status: 1
+stdout & stderr: <printed>
+---
+Backtrace:
+ 1. devtools::]8;;ide:help:devtools::installinstall]8;;()
+ 2. pkgbuild::build(pkg$path, dest_path = tempdir(), args = build_opts, …
+ 3. withr::with_temp_libpaths(rcmd_build_tools(options$cmd, c(options$path, …
+ 4. base::]8;;ide:help:base::forceforce]8;;(code)
+ 5. pkgbuild::rcmd_build_tools(options$cmd, c(options$path, options$args), …
+ 6. pkgbuild::with_build_tools({ …
+ 7. base::withCallingHandlers(callr::rcmd_safe(..., env = env, spinner = FALSE, …
+ 8. callr::rcmd_safe(..., env = env, spinner = FALSE, show = FALSE, …
+ 9. callr:::run_r(options)
+10. base::with(options, with_envvar(env, do.call(processx::run, c(list(bin, …
+11. base::with.default(options, with_envvar(env, do.call(processx::run, …
+12. base::]8;;ide:help:base::evaleval]8;;(]8;;ide:help:base::substitutesubstitute]8;;(expr), data, enclos = ]8;;ide:help:base::parent.frameparent.frame]8;;())
+13. base::]8;;ide:help:base::evaleval]8;;(]8;;ide:help:base::substitutesubstitute]8;;(expr), data, enclos = ]8;;ide:help:base::parent.frameparent.frame]8;;())
+14. callr:::with_envvar(env, do.call(processx::run, c(list(bin, args = real_cmdargs, …
+15. base::]8;;ide:help:base::forceforce]8;;(code)
+16. base::do.call(processx::run, c(list(bin, args = real_cmdargs, stdout_line_callback = real_callback(stdout), …
+17. (function (command = NULL, args = character(), error_on_status = TRUE, …
+18. base::throw(new_process_error(res, call = sys.call(), echo = echo, …
+19. | base::]8;;ide:help:base::signalConditionsignalCondition]8;;(cond)
+20. (function (e) …
+21. ]8;;ide:help:base::asNamespaceasNamespace]8;;("callr")$err$throw(e)

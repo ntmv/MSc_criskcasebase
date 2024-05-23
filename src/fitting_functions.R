@@ -4,7 +4,7 @@
 #' @param cb_data Output of \code{create_cbDataset}
 #' @param fit_object Output of \code{fit_cbmodel}
 #' @return Multinomial deviance
-multi_deviance_cb <- function(cb_data, fit_object) {
+multi_deviance <- function(cb_data, fit_object) {
   X <- as.matrix(cbind(cb_data$covariates, 1))
   fitted_vals <- as.matrix(X %*% fit_object$coefficients)
   pred_mat <- VGAM::multilogitlink(fitted_vals, 
@@ -23,6 +23,7 @@ multi_deviance_cb <- function(cb_data, fit_object) {
   
   return(dev)
 } 
+
 
 ###############################################
 #' Create the case-base sampled dataset
@@ -72,8 +73,6 @@ fit_cbmodel <- function(cb_data, regularization = 'elastic-net',
   lambda2 <- 0.5*lambda*(1 - alpha)
   # Prepare covariate matrix with intercept
   X <- as.matrix(cbind(cb_data$covariates, 1))
-  print(head(X))
-  print(head(cb_data$event_ind))
   out <- fit.mtool <- mtool::mtool.MNlogistic(
     X = as.matrix(X),
     Y = cb_data$event_ind,
@@ -170,7 +169,7 @@ mtool.multinom.cv <- function(train, regularization = 'elastic-net', lambda_max 
                     "offset" = test_cv$offset)
     # Standardize
     test_cv$covariates <- as.data.frame(scale(test_cv$covariates, center = T, scale = T))
-    mult_deviance <- unlist(lapply(cvs_res, multi_deviance_cb, cb_data = test_cv))
+    mult_deviance <- unlist(lapply(cvs_res, multi_deviance, cb_data = test_cv))
     all_deviances[, i] <- mult_deviance
     non_zero_coefs[, i] <-  unlist(lapply(cvs_res, function(x) {return(x$no_non_zero)}))
     cat("Completed Fold", i, "\n")
@@ -456,7 +455,6 @@ weibull_hazard <- Vectorize(function(gamma, lambda, t) {
   return(gamma * lambda * t^(gamma - 1))
 })
 
-############ Function to simulate from cause-specific hazards ############################
 cause_hazards_sim <- function(p, n, beta1, beta2, 
                               nblocks = 4, cor_vals = c(0.7, 0.4, 0.6, 0.5), num.true = 20, h1 = 0.55, h2 = 0.10, 
                               gamma1 = 100, gamma2 = 100, max_time = 1.5, noise_cor = 0.1, 
@@ -541,6 +539,7 @@ cause_hazards_sim <- function(p, n, beta1, beta2,
   sim.data <- as.data.frame(cbind(sim.data, X))
   return(sim.data)
 }
+
 
 
 

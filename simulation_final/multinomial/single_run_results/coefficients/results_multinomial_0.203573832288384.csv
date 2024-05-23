@@ -1,0 +1,9 @@
+"","TP","TN","FP","FN","Sensitivity","Specificity","MCC","Coefficient_Bias"
+"glmnet.lambda.min_reference1",8,9,1,2,0.8,0.9,0.703526470681448,4.01008014243897
+"glmnet.lambda.min_reference2",8,9,1,2,0.8,0.9,0.703526470681448,4.06364559246195
+"mtool.relaxed.no.pen.lambda.min_reference1",5,5,5,5,0.5,0.5,0,4.24726140910999
+"mtool.relaxed.no.pen.lambda.min_reference2",7,7,3,3,0.7,0.7,0.4,4.28981088513833
+"mtool.relaxed.small.pen.lambda.min_reference1",2,9,1,8,0.2,0.9,0.140028008402801,4.42610987828455
+"mtool.relaxed.small.pen.lambda.min_reference2",1,10,0,9,0.1,1,0.229415733870562,4.48243094718089
+"mtool.relaxed.significant.pen.lambda.min_reference1",8,5,5,2,0.8,0.5,0.314485451016575,4.18382078818159
+"mtool.relaxed.significant.pen.lambda.min_reference2",9,5,5,1,0.9,0.5,0.436435780471985,4.19662081181394

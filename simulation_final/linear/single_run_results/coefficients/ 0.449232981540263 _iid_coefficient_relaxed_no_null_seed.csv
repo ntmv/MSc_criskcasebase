@@ -1,0 +1,6 @@
+"","Model","V1","V2","V3","V4","V5","V6","V7","V8","V9","V10","V11","V12","V13","V14","V15","V16","V17","V18","V19","V20"
+"1","cv.glmnet relax = TRUE, lambda min",-0.01,0.009,0.01,0.034,0.015,0.01,-0.021,0.035,-0.021,0.004,0,0,0,0,0,0,0,0,0,0
+"2","Relaxed LASSO implementation, glmnet(), start CV AFTER predictors selected",0.007,0.002,0.036,0.037,0.023,0.016,-0.03,0.001,-0.024,-0.011,0,0,0,0,0,0,0,0,0.056,0
+"3","Relaxed LASSO implementation, cv.glmnet(), start CV AFTER predictors selected",-0.012,0.013,0.009,0.017,0.019,0.02,-0.015,0.057,-0.021,0.002,0,0,0,0,0,0,0,0,0,0
+"4","Relaxed LASSO implementation, glmnet(), start CV BEFORE predictors selected",-0.001,-0.006,0.013,0.045,0.038,0.017,-0.012,0.047,-0.019,-0.009,0,0,0,0,0,0,0,0,0,0
+"5","Post LASSO lambda min",-0.045,-0.032,-0.027,0.004,-0.001,-0.027,-0.048,-0.006,-0.055,-0.029,0,0,0,0,0,0,0,0,0.024,0

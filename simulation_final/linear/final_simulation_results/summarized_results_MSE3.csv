@@ -1,0 +1,6 @@
+"","Model","Test MSE"
+"1","cv.glmnet relax = TRUE, lambda min",0.238852979154135
+"2","Relaxed LASSO implementation, glmnet(), start CV AFTER predictors selected",0.242250685540121
+"3","Relaxed LASSO implementation, cv.glmnet(), start CV AFTER predictors selected",0.240789207070607
+"4","Relaxed LASSO implementation, glmnet(), start CV BEFORE predictors selected",0.240315125312771
+"5","Post LASSO lambda min",0.260183503315605

@@ -1,0 +1,11 @@
+"","Sensitivity","Specificity","MCC","Coefficient_Bias"
+"cox.lambda.min_cause1_results",0.8575,0.75,0.622633086239462,11.3600004666122
+"cox.lambda.min_cause2_results",0.9825,0.445,0.506818400671515,0.108413001347882
+"casebase.cv.lambda.min_cause1_results",0.9875,0.6375,0.670507963503747,11.2625962128457
+"casebase.cv.lambda.min_cause2_results",0.9425,0.605,0.579207942246823,0.353857039421108
+"casebase.relaxed.lambda.min.no.pen_cause1_results",0.8675,0.87,0.759693424188367,11.6736982671521
+"casebase.relaxed.lambda.min.no.pen_cause2_results",0.7625,0.845,NA,0.40559071854713
+"casebase.relaxed.lambda.min.small.pen_cause1_results",0.83,0.8775,NA,11.6543975330184
+"casebase.relaxed.lambda.min.small.pen_cause2_results",0.74,0.8525,NA,0.405702285839451
+"casebase.relaxed.lambda.min.sig.pen_cause1_results",0.945,0.78,0.751285259275508,11.481187468413
+"casebase.relaxed.lambda.min.sig.pen_cause2_results",0.85,0.7625,NA,0.38177277235352
