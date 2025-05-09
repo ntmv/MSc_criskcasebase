@@ -21,3 +21,31 @@ MultinomLogistic <- function(X, Y, offset, K, reg_p, penalty, regul, transpose, 
     .Call(`_mtool_MultinomLogistic`, X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores)
 }
 
+grad_ls_loss2 <- function(x, y, param, p) {
+    .Call(`_mtool_grad_ls_loss2`, x, y, param, p)
+}
+
+grad_logistic_loss2 <- function(x, y, param, p) {
+    .Call(`_mtool_grad_logistic_loss2`, x, y, param, p)
+}
+
+MultinomLogistic2 <- function(X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores) {
+    .Call(`_mtool_MultinomLogistic2`, X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores)
+}
+
+MultinomLogistic3 <- function(X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores) {
+    .Call(`_mtool_MultinomLogistic3`, X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores)
+}
+
+MultinomLogisticExp <- function(X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores) {
+    .Call(`_mtool_MultinomLogisticExp`, X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores)
+}
+
+MultinomLogisticAcc <- function(X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, momentum_gamma, tolerance, niter_inner, maxit, ncores, pos = FALSE) {
+    .Call(`_mtool_MultinomLogisticAcc`, X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, momentum_gamma, tolerance, niter_inner, maxit, ncores, pos)
+}
+
+MultinomLogisticSARAH <- function(X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores) {
+    .Call(`_mtool_MultinomLogisticSARAH`, X, Y, offset, K, reg_p, penalty, regul, transpose, grp_id, etaG, grp, grpV, own_var, N_own_var, lam1, lam2, lam3, learning_rate, tolerance, niter_inner, maxit, ncores)
+}
+
