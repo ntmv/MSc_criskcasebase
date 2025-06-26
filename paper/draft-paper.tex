@@ -1,0 +1,472 @@
+\documentclass[AMA,Times1COL]{WileyNJDv5} %STIX1COL,STIX2COL,STIXSMALL
+
+
+\articletype{Article Type}%
+
+\received{Date Month Year}
+\revised{Date Month Year}
+\accepted{Date Month Year}
+\journal{Journal}
+\volume{00}
+\copyyear{2023}
+\startpage{1}
+
+\raggedbottom
+
+
+
+\begin{document}
+
+\title{Penalized Competing Risks Analysis using  casebase sampling}
+
+\author[1]{Author One}
+
+\author[2,3]{Author Two}
+
+\author[3]{Author Three}
+
+\authormark{TAYLOR \textsc{et al.}}
+\titlemark{PLEASE INSERT YOUR ARTICLE TITLE HERE}
+
+\address[1]{\orgdiv{Department Name}, \orgname{Institution Name}, \orgaddress{\state{State Name}, \country{Country Name}}}
+
+\address[2]{\orgdiv{Department Name}, \orgname{Institution Name}, \orgaddress{\state{State Name}, \country{Country Name}}}
+
+\address[3]{\orgdiv{Department Name}, \orgname{Institution Name}, \orgaddress{\state{State Name}, \country{Country Name}}}
+
+\corres{Corresponding author Mark Taylor, This is sample corresponding address. \email{authorone@gmail.com}}
+
+\presentaddress{This is sample for present address text this is sample for present address text.}
+
+%\fundingInfo{Text}
+%\JELinfo{ejlje}
+
+\abstract[Abstract]{In biomedical studies, quantifying the association between prognostic genes and markers with time-to-event outcomes is crucial for predicting a patient's risk of disease based on their specific covariate profile. Modeling competing risks is essential, as patients may be at risk for multiple mutually exclusive events, such as death from alternative causes. However, existing methods for competing risks analyses often produce coefficient estimates that lack interpretability, making it difficult to link them with event rates. Additionally, the high dimensionality of genomic data, where the number of variables exceeds the number of subjects, poses a significant challenge.
+
+In this work, we propose a novel approach that employs an elastic-net penalized multinomial model within a case-based sampling framework to analyze competing risks survival data. Furthermore, we introduce a two-step method, termed the de-biased case-base, to enhance the predictive performance regarding disease risk. Through a comprehensive simulation study that replicates biomedical data, we demonstrate that the case-base method is effective in variable selection and survival prediction, especially in scenarios involving non-proportional hazards. Moreover, we highlight the flexibility of this approach in generating smooth-time incidence curves, which significantly improve the accuracy of patient risk assessments.}
+
+\keywords{keyword1, keyword2, keyword3, keyword4}
+
+\jnlcitation{\cname{%
+\author{Taylor M.},
+\author{Lauritzen P},
+\author{Erath C}, and
+\author{Mittal R}}.
+\ctitle{On simplifying ‘incremental remap’-based transport schemes.} \cjournal{\it J Comput Phys.} \cvol{2021;00(00):1--18}.}
+
+
+\maketitle
+
+\renewcommand\thefootnote{}
+\footnotetext{\textbf{Abbreviations:} ANA, anti-nuclear antibodies; APC, antigen-presenting cells; IRF, interferon regulatory factor.}
+
+\renewcommand\thefootnote{\fnsymbol{footnote}}
+\setcounter{footnote}{1}
+
+\section{INTRODUCTION}\label{sec1}
+
+In numerous clinical studies, a primary outcome often modelled is the time to an event of interest, or the survival time during the study period. When every individual in a study experiences the event, several statistical methods can be applied effectively. However, analyzing survival data presents some challenges: 1) Not all patients experience the event within the study timeframe, yet they remain at risk of doing so in the future, leaving their actual time to the event unknown. 2)Survival data are rarely normally distributed and typically exhibit a skewed distribution.
+
+Given these challenges, developing methods tailored in particular for extit{survival data} is essential. In typical survival or time-to-event analysis, the outcome variable denotes the time until one event of interest occurs. However, combined endpoints are a common extension that incorporates both the cause of interest and a competing risk. In this context, a competing risk is an event that prevents the primary event of interest from occurring. For example, many medical studies consider 'disease-free survival,' defined as the time until either the recurrence of a disease or death (from a cause other than the disease), whichever occurs first. Here, while death due to the prior disease is our primary outcome, death from another cause is classified as a competing risk.
+
+From a clinical perspective, the most significant quantity for both clinicians and patients derived from survival analysis is the estimated risk of an event for patients with a particular covariate profile. This risk can be estimated through the cumulative incidence function (CIF), also known as absolute risk, which represents the probability that a person at risk will experience the event of interest within a specified time interval.
+
+One widely used method for analyzing a single endpoint in survival analysis is the Cox Proportional Hazards model. Its flexibility arises from its semi-parametric formulation, allowing inference about covariate influence on the hazard function without restricting the response to a specific parametric family. However, this flexibility has a drawback: the baseline hazard is decoupled from the covariate effects, necessitating separate estimation for the baseline hazard when calculating the cumulative incidence function. This leads to stepwise survival risk estimates that can be challenging to interpret. Additionally, extending the Cox model to a competing risks scenario requires fitting separate models for each competing risk. This method is limited because, while we can estimate cause-specific hazards, we cannot concurrently estimate the cumulative incidence of the event of interest while accounting for competing risks.
+
+To address these limitations, the Fine-Gray model was proposed as an alternative, directly modelling the influence of covariates on the cumulative incidence function. However, when examining whether a specific risk factor is associated with the rate of outcome occurrence among event-free subjects, cause-specific hazards are also of interest, which this model does not easily provide. Moreover, certain combinations of covariates in the Fine-Gray model may yield cumulative incidence probability estimates exceeding 1 (as we demonstrate here). Indeed, in modelling competing risks, existing approaches either focus on cause-specific hazards or cumulative incidence functions. Since a complete competing risks survival analysis requires both, the process of estimating one from the other is not straightforward with current models.
+
+As survival data generation, particularly high-dimensional data, becomes more common, there is a growing need for a competing risks model that can effectively model cause-specific hazards, produce smooth and interpretable cumulative incidence function estimates, and establish a framework adaptable for high-dimensional data applications and situations with time-varying covariates. Consequently, in this thesis, we propose utilizing a multinomial model combined with case-based sampling to fit fully parametric hazard models. This approach offers smooth hazard and cumulative incidence function estimates, while our application of multinomial regression grants access to the advantageous properties of the generalized linear models family, including regularization-based variable selection.
+
+In this thesis, we show that the multinomial model with casebase sampling shows strong variable selection performance in both low and high-dimensional data while effectively predicting cumulative risk, making it a viable option for complete competing risks analysis. The thesis is organized as follows: Chapter 2 provides a comprehensive background on competing risks survival analysis and current methodologies for such data. Chapter 3 discusses the mathematical and computational specifics of the case-based multinomial implementation. Chapter 4 presents the results of our simulation experiments, focusing on variable selection and prediction performance while also exploring two case studies that showcase the desirable properties of case-based sampling in comparison to other methodologies. Finally, Chapter 5 concludes the thesis with a discussion of limitations, extensions of the approach, and suggestions for future research. 
+
+
+\section{METHODS}\label{sec2}
+
+\subsection{Casebase Framework}
+
+In a competing risks setting, we can model the occurrence of different event types using counting processes. Let $N_{0j;i}(t)$ be the counting process for individual $i$ and event type $j$. This process equals 1 if individual $i$ transitions from a starting state (state 0) to event state $j$ within the time interval $[0, t]$, and is 0 otherwise. The history of the process for individual $i$ up to time $t$ is denoted by $\mathcal{H}_{i}(t-)$. The expected differential change in the counting process is related to the cause-specific hazard function, $\alpha_{ij}(t)$, by the following expression
+$$E[dN_{0j;i}(t) | \mathcal{H}_{i}(t-)] = I(T_i \ge t, J_i = j) \alpha_{ij}(t)dt.$$
+
+The casebase sampling framework was formally proposed for fitting smooth-in-time functions. It is an extension of methods used in case-control studies. The framework conceives of an entire study base, which is the aggregate of all individual follow-up times, or person-time. This study base is composed of person-moments. A person-moment is defined by a specific point in time, $t$, and the individual's corresponding prognostic value at that time.
+
+From the study base, two series are generated: a case series and a base series. The case series is comprised of all person-moments at which an event of interest occurred. The base series consists of a representative sample of person-moments, known as controls, from the study base. These person-moments can be sampled by first selecting an individual $i$ with probability $\phi_{i}=B_{i}/B$, where $B_{i}$ is the total person-time contributed by individual $i$ and $B$ is the total person-time in the study. A person-moment $b_j$ is then sampled uniformly from that individual's follow-up time, a process which can be modelled as $b_{j}\sim \text{Unif}(0,B_{i})$. An individual may contribute multiple person-moments to the base series.
+
+The fundamental concept of casebase sampling is the comparison of person-moments when events happened (the cases) with person-moments when individuals were at risk of the event (the bases). This method of representative sampling is distinct from the risk-set sampling used in Cox regression and is designed to capture the full baseline hazard. A primary advantage of this approach is its ability to estimate cause-specific hazard functions directly, which then allows for the derivation of smooth-in-time survival and cumulative incidence functions.
+
+To estimate the parameters, we return to the framework of the counting process. The cause-specific hazard function for event $j$ and individual $i$ is parameterized in terms of a vector of coefficients, $\beta_{j}$, and time, $t$, denoted as $\alpha_{ij}(t;\beta_{j})$. Based on the relationship established for counting processes, the differential change in the cause-specific hazard functions for individual $i$ at time-to-event $T_i$ satisfies
+$$\alpha_{ij}(t;\beta_{j})dt=E[dN_{0j;i}(t)|\mathcal{H}_{i}(t-)]$$
+This forms the basis for constructing the likelihood and estimating functions for the model parameters.
+
+\subsection{Multinomial Parameterization, Regularization and Optimization}
+
+We can construct a multinomial logistic model for the casebase likelihood. We use $Y_{i}$ to represent a categorical response variable. Let us define $Y_{i}$ to have 3 levels for the case of two competing events, i.e., {0,1,2}, where the total number of competing events is 2. The likelihood function can be expressed as follows
+$$\log\left(\frac{\text{Pr}(Y=j|X_i)}{\text{Pr}(Y=0|X_i)}\right)$$
+where class 0, i.e the censored individuals act as the reference class. The likelihood is defined for a set of covariates $X_{i}$ for individual $i$.
+
+In terms of optimizing a penalized likelihood, the glmnet package has implemented fast algorithms for several generalized linear models, including the multinomial regression with the elastic-net family penalty. However, the glmnet package uses a symmetric parameterization of the multinomial model. This parameterization estimates the relative differences between classes rather than estimating the absolute probabilities for each class, resulting in the constant offset term not being fit. Since the casebase approach relies on the constant offset of the intensity function, we require a penalized model using the multinomial logistic parameterization. The development of a function to fit and tune this penalized model is a key contribution of this work.
+
+The penalized multinomial logistic regression is fit using accelerated stochastic variance reduced gradient descent (ASVRG), as this algorithm exhibits fast convergence for high-dimensional datasets with a greater number of predictors than observations ($p> n$). This accelerated algorithm combines SVRG's variance reduction with momentum to speed up convergence (@DriggsEhrhardtSchonlieb:2022). Like SVRG, this algorithm starts with a full-batch gradient computation. However, instead of relying solely on stochastic updates, it introduces a sequence of extrapolated points, which are constructed using a weighted combination of the current and previous iterations.
+
+Here, we consider $l(\beta)$ to denote the joint likelihood over all individuals $i=1,...n$ and causes $j=1,2$ i.e., $\sum_{i=1}^{n}\sum_{j=1}^{2}\log(\frac{\text{Pr}(Y_{i}=j|X_{i})}{\text{Pr}(Y_{i}=0|X_{i})})$. For the covariates $k\in\{1,...,p\}$, we can estimate the coefficient matrix $\beta$ as 
+$$\hat{\beta}=\text{arg max}_{\beta}\{l(\beta)+\lambda\sum_{k=1}^{p}w_{k}((\frac{1-\phi}{2})\sum_{j=1}^{2}\beta_{kj}^{2}+\phi\sum_{j=1}^{2}|\beta_{kj}|)\}.$$
+
+$\phi$ is the mixing parameter between the LASSO and ridge penalties. Setting $\phi=1$ and $\phi=0$ corresponds to the LASSO and ridge penalties respectively. $w_{k}$ represents the penalty factor for the $k^{th}$ covariate to allow parameters to be penalized differently. In this work, the penalty factor for the intercept and for time is set to 0 so they are unpenalized and always included in the model. Solving for the coefficients $\beta$ will yield a matrix of dimension $(p+1)\times2$, of which the $j^{th}$ column corresponds to the coefficients of cause j, for $j=1,2$.
+
+A cross-validation function was also implemented to tune the shrinkage parameter $\lambda$. The tuning is based on the multinomial deviance as the model goodness-of-fit metric, given below $$-2\sum_{i=1}^{n}\sum_{j=1}^{2}\log(\frac{\text{Pr}(Y_{i}=j|X_{i})}{\text{Pr}(Y_{i}=0|X_{i})}).$$
+
+The approach to tune $\lambda$ is described in Algorithm 1 and corresponds very closely to the cross-validation functions in glmnet. The procedure includes a grid-search for $\lambda_{max}$ because a closed form for it does not exist for multinomial regression.
+
+\subsection{De-biasing Step}
+
+Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Donec odio elit, dictum
+in, hendrerit sit amet, egestas sed, leo. Praesent feugiat sapien aliquet odio. Integer vitae justo. Aliquam vestibulum
+fringilla lorem. Sed neque lectus, consectetuer at, consectetuer sed, eleifend ac, lectus. Nulla facilisi. Pellentesque
+eget lectus. Proin eu metus. Sed porttitor. In hac habitasse platea dictumst. Suspendisse eu lectus. Ut mi mi, lacinia
+sit amet, placerat et, mollis vitae, dui. Sed ante tellus, tristique ut, iaculis eu, malesuada ac, dui. Mauris nibh leo,
+facilisis non, adipiscing quis, ultrices a, dui.
+
+
+\section{SIMULATION STUDIES}\label{sec3}
+
+\subsection{Example for another second-level head}
+
+Data are simulated from a $K=2$ competing risks proportional hazards model. The cause-specific hazard for cause for individual $i$ with covariates $X_i = (X_{i1}, \dots, X_{ip})$ at time $t$ is $\lambda_k(t | X_i) = \lambda_{0k}(t) \exp(X_i^T \beta_k)$. The baseline hazards $\lambda_{0k}(t)$ follow a Weibull distribution $\lambda_{0k}(t) = h_k \gamma_k t^{\gamma_k - 1}$, with parameters $(h_1, \gamma_1)=(0.55, 1.5)$ and $(h_2, \gamma_2)=(0.35, 1.5)$.
+
+The coefficient vectors $\beta_1, \beta_2 \in \mathbb{R}^p$ are sparse, with non-zero effects predominantly within the first 18 predictors. For cause 1, the coefficients for $X_1, \dots, X_{18}$ are set as $(1, 1, 1, 1, 1, 1,$ $0.5, -0.5, 0.5, -0.5, 0.5, -0.5$ $1, 1, 1, 1, 1, 1)$, and 0 for $j > 18$. For cause 2 ($\beta_2$), the coefficients for $X_1, \dots, X_{24}$ are set as $(0, 0, 0, 0, 0, 0,$ $0.5, -0.5, 0.5, -0.5, 0.5,$ $-0.5, 0, 0, 0, 0, 0, 0,$ $1, 1, 1, 1, 1, 1)$, and 0 for $j > 24$.
+
+Event times $T_i$ and causes $C_i$ are generated by simulating potential failure times $T_{ik}$ from $\lambda_k(t|X_i)$ and setting $T_i = \min(T_{i1}, T_{i2})$ with $C_i$ being the index $k$ for which $T_{ik} = T_i$. Independent censoring times $T_{cens, i}$ are generated based on an overall rate of 0.05. Observed data consist of $(ftime_i, fstatus_i)$, where $ftime_i = \min(T_i, T_{cens, i})$ and the status $fstatus_i = C_i \cdot \mathds{1}(T_i \le T_{cens, i})$ (with $fstatus_i=0$ indicating censoring).
+
+
+\subsection{Second level head}
+
+Etiam euismod. Fusce facilisis lacinia dui. Suspendisse potenti. In mi erat, cursus id, nonummy sed, ullamcorper
+eget, sapien. Praesent pretium, magna in eleifend egestas, pede pede pretium lorem, quis consectetuer tortor sapien
+facilisis magna. Mauris quis magna varius nulla scelerisque imperdiet. Aliquam non quam. Aliquam porttitor quam
+a lacus. Praesent vel arcu ut tortor cursus volutpat. In vitae pede quis diam bibendum placerat. Fusce elementum
+convallis neque. Sed dolor orci, scelerisque ac, dapibus nec, ultricies ut, mi. Duis nec dui quis leo sagittis commodo.
+Nulla non mauris vitae wisi posuere convallis. Sed eu nulla nec eros scelerisque pharetra. Nullam varius. Etiam
+dignissim elementum metus. Vestibulum faucibus, metus sit amet mattis rhoncus, sapien dui laoreet odio, nec ultricies
+nibh augue a enim. Fusce in ligula. Quisque at magna et nulla commodo consequat. Proin accumsan imperdiet sem.
+Nunc porta. Donec feugiat mi at justo. Phasellus facilisis ipsum quis ante. In ac elit eget ipsum pharetra faucibus.
+Maecenas viverra nulla in massa (Table~\ref{tab2}).
+
+\begin{definition}
+Example definition text. Example definition text. Example definition text. Example definition text. Example definition text. Example definition text. Example definition text. Example definition text. Example definition text. Example definition text. Example definition text.
+\end{definition}
+
+Sed commodo posuere pede. Mauris ut est. Ut quis purus. Sed ac odio. Sed vehicula hendrerit sem. Duis non
+odio. Morbi ut dui. Sed accumsan risus eget odio. In hac habitasse platea dictumst. Pellentesque non elit. Fusce
+sed justo eu urna porta tincidunt. Mauris felis odio, sollicitudin sed, volutpat a, ornare ac, erat. Morbi quis dolor.
+Donec pellentesque, erat ac sagittis semper, nunc dui lobortis purus, quis congue purus metus ultricies tellus. Proin
+et quam. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Praesent sapien
+turpis, fermentum vel, eleifend faucibus, vehicula eu, lacus.
+
+
+\begin{proof}
+Example for proof text. Example for proof text. Example for proof text. Example for proof text. Example for proof text. Example for proof text. Example for proof text. Example for proof text. Example for proof text. Example for proof text.
+\end{proof}
+
+\begin{algorithm}
+\caption{\enskip Pseudocode for our algorithm}\label{alg1}
+\begin{algorithmic}
+  \For each frame
+  \For water particles $f_{i}$
+  \State compute fluid flow \cite{Hirt1974}
+  \State compute fluid--solid interaction \cite{Benson1992}
+  \State apply adhesion and surface tension \cite{Margolin2003}
+  \EndFor
+   \For solid particles $s_{i}$
+   \For neighboring water particles $f_{j}$
+   \State compute virtual water film \\(see Section~\ref{sec3})
+   \EndFor
+   \EndFor
+   \For solid particles $s_{i}$
+   \For neighboring water particles $f_{j}$
+   \State compute growth direction vector \\(see Section~\ref{sec2})
+   \EndFor
+   \EndFor
+   \For solid particles $s_{i}$
+   \For neighboring water particles $f_{j}$
+   \State compute $F_{\theta}$ (see Section~\ref{sec1})
+   \State compute $CE(s_{i},f_{j})$ \\(see Section~\ref{sec3})
+   \If $CE(b_{i}, f_{j})$ $>$ glaze threshold
+   \State $j$th water particle's phase $\Leftarrow$ ICE
+   \EndIf
+   \If $CE(c_{i}, f_{j})$ $>$ icicle threshold
+   \State $j$th water particle's phase $\Leftarrow$ ICE
+   \EndIf
+   \EndFor
+   \EndFor
+  \EndFor
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\section{Conclusions}\label{sec5}
+
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Ut purus elit, vestibulum ut, placerat ac, adipiscing vitae,
+felis. Curabitur dictum gravida mauris. Nam arcu libero, nonummy eget, consectetuer id, vulputate a, magna. Donec
+vehicula augue eu neque. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.
+Mauris ut leo. Cras viverra metus rhoncus sem. Nulla et lectus vestibulum urna fringilla ultrices. Phasellus eu tellus
+sit amet tortor gravida placerat. Integer sapien est, iaculis in, pretium quis, viverra ac, nunc. Praesent eget sem vel
+leo ultrices bibendum. Aenean faucibus. Morbi dolor nulla, malesuada eu, pulvinar at, mollis ac, nulla. Curabitur
+auctor semper nulla. Donec varius orci eget risus. Duis nibh mi, congue eu, accumsan eleifend, sagittis quis, diam.
+Duis eget orci sit amet orci dignissim rutrum.
+
+
+%\backmatter
+\bmsection*{Author contributions}
+
+This is an author contribution text. This is an author contribution text. This is an author contribution text. This is an author contribution text. This is an author contribution text.
+
+\bmsection*{Acknowledgments}
+This is acknowledgment text. \cite{Kenamond2013} Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here. This is acknowledgment text. Provide text here.
+
+
+\bmsection*{Financial disclosure}
+
+None reported.
+
+\bmsection*{Conflict of interest}
+
+The authors declare no potential conflict of interests.
+
+\bibliography{wileyNJD-AMA}
+
+
+\bmsection*{Supporting information}
+
+Additional supporting information may be found in the
+online version of the article at the publisher’s website.
+
+
+
+
+\appendix
+
+\bmsection{Program codes appear in Appendix\label{app1}}
+\vspace*{12pt}
+Using the package {\tt listings} you can add non-formatted text as you would do with \verb|\begin{verbatim}| but its main aim is to include the source code of any programming language within your document.\newline Use \verb|\begin{lstlisting}...\end{lstlisting}| for program codes without mathematics.
+
+The {\tt listings} package supports all the most common languages and it is highly customizable. If you just want to write code within your document, the package provides the {\tt lstlisting} environment; the output will be in Computer Modern typewriter font. Refer to the below example:
+
+
+\begin{lstlisting}[caption={Descriptive caption text},label=DescriptiveLabel, basicstyle=\fontsize{8}{10}\selectfont\ttfamily]
+for i:=maxint to 0 do
+begin
+{ do nothing }
+end;
+Write('Case insensitive ');
+WritE('Pascal keywords.');
+\end{lstlisting}
+
+
+
+\bmsubsection{Subsection title of first appendix\label{app1.1a}}
+
+Nam dui ligula, fringilla a, euismod sodales, sollicitudin vel, wisi. Morbi auctor lorem non justo. Nam lacus libero,
+pretium at, lobortis vitae, ultricies et, tellus. Donec aliquet, tortor sed accumsan bibendum, erat ligula aliquet magna,
+vitae ornare odio metus a mi. Morbi ac orci et nisl hendrerit mollis. Suspendisse ut massa. Cras nec ante. Pellentesque
+a nulla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aliquam tincidunt
+urna. Nulla ullamcorper vestibulum turpis. Pellentesque cursus luctus mauris.
+
+Nulla malesuada porttitor diam. Donec felis erat, congue non, volutpat at, tincidunt tristique, libero. Vivamus
+viverra fermentum felis. Donec nonummy pellentesque ante. Phasellus adipiscing semper elit. Proin fermentum massa
+ac quam. Sed diam turpis, molestie vitae, placerat a, molestie nec, leo. Maecenas lacinia. Nam ipsum ligula, eleifend
+at, accumsan nec, suscipit a, ipsum. Morbi blandit ligula feugiat magna. Nunc eleifend consequat lorem. Sed lacinia
+nulla vitae enim. Pellentesque tincidunt purus vel magna. Integer non enim. Praesent euismod nunc eu purus. Donec
+bibendum quam in tellus. Nullam cursus pulvinar lectus. Donec et mi. Nam vulputate metus eu enim. Vestibulum
+pellentesque felis eu massa.
+Nulla malesuada porttitor diam. Donec felis erat, congue non, volutpat at, tincidunt tristique, libero. Vivamus
+viverra fermentum felis. Donec nonummy pellentesque ante. Phasellus adipiscing semper elit. Proin fermentum massa
+ac quam. Sed diam turpis, molestie vitae, placerat a, molestie nec, leo. Maecenas lacinia. Nam ipsum ligula, eleifend
+at, accumsan nec, suscipit a, ipsum. Morbi blandit ligula feugiat magna. Nunc eleifend consequat lorem. Sed lacinia
+nulla vitae enim. Pellentesque tincidunt purus vel magna. Integer non enim. Praesent euismod nunc eu purus. Donec
+bibendum quam in tellus. Nullam cursus pulvinar lectus. Donec et mi. Nam vulputate metus eu enim. Vestibulum
+pellentesque felis eu massa.
+
+\bmsubsubsection{Subsection title of first appendix\label{app1.1.1a}}
+
+\noindent\textbf{Unnumbered figure}
+
+
+\begin{center}
+\includegraphics[width=7pc,height=8pc,draft]{empty}
+\end{center}
+
+
+Fusce mauris. Vestibulum luctus nibh at lectus. Sed bibendum, nulla a faucibus semper, leo velit ultricies tellus, ac
+venenatis arcu wisi vel nisl. Vestibulum diam. Aliquam pellentesque, augue quis sagittis posuere, turpis lacus congue
+quam, in hendrerit risus eros eget felis. Maecenas eget erat in sapien mattis porttitor. Vestibulum porttitor. Nulla
+facilisi. Sed a turpis eu lacus commodo facilisis. Morbi fringilla, wisi in dignissim interdum, justo lectus sagittis dui, et
+vehicula libero dui cursus dui. Mauris tempor ligula sed lacus. Duis cursus enim ut augue. Cras ac magna. Cras nulla.
+
+Nulla egestas. Curabitur a leo. Quisque egestas wisi eget nunc. Nam feugiat lacus vel est. Curabitur consectetuer.
+Suspendisse vel felis. Ut lorem lorem, interdum eu, tincidunt sit amet, laoreet vitae, arcu. Aenean faucibus pede eu
+ante. Praesent enim elit, rutrum at, molestie non, nonummy vel, nisl. Ut lectus eros, malesuada sit amet, fermentum
+eu, sodales cursus, magna. Donec eu purus. Quisque vehicula, urna sed ultricies auctor, pede lorem egestas dui, et
+convallis elit erat sed nulla. Donec luctus. Curabitur et nunc. Aliquam dolor odio, commodo pretium, ultricies non,
+pharetra in, velit. Integer arcu est, nonummy in, fermentum faucibus, egestas vel, odio.
+
+\bmsection{Section title of second appendix\label{app2}}%
+\vspace*{12pt}
+Fusce mauris. Vestibulum luctus nibh at lectus. Sed bibendum, nulla a faucibus semper, leo velit ultricies tellus, ac
+venenatis arcu wisi vel nisl. Vestibulum diam. Aliquam pellentesque, augue quis sagittis posuere, turpis lacus congue
+quam, in hendrerit risus eros eget felis. Maecenas eget erat in sapien mattis porttitor. Vestibulum porttitor. Nulla
+facilisi. Sed a turpis eu lacus commodo facilisis. Morbi fringilla, wisi in dignissim interdum, justo lectus sagittis dui, et
+vehicula libero dui cursus dui. Mauris tempor ligula sed lacus. Duis cursus enim ut augue. Cras ac magna. Cras nulla (Figure~\ref{fig5}).
+
+Nulla egestas. Curabitur a leo. Quisque egestas wisi eget nunc. Nam feugiat lacus vel est. Curabitur consectetuer.
+Suspendisse vel felis. Ut lorem lorem, interdum eu, tincidunt sit amet, laoreet vitae, arcu. Aenean faucibus pede eu
+ante. Praesent enim elit, rutrum at, molestie non, nonummy vel, nisl. Ut lectus eros, malesuada sit amet, fermentum
+eu, sodales cursus, magna. Donec eu purus. Quisque vehicula, urna sed ultricies auctor, pede lorem egestas dui, et
+convallis elit erat sed nulla. Donec luctus. Curabitur et nunc. Aliquam dolor odio, commodo pretium, ultricies non,
+pharetra in, velit. Integer arcu est, nonummy in, fermentum faucibus, egestas vel, odio.
+
+%== Figure 4 ==
+%% Example for figure inside appendix
+\begin{figure}[b]
+\centerline{\includegraphics[height=10pc,width=78mm,draft]{empty}}
+\caption{This is an example for appendix figure.\label{fig5}}
+\end{figure}
+
+\bmsubsection{Subsection title of second appendix\label{app2.1a}}
+
+Sed commodo posuere pede. Mauris ut est. Ut quis purus. Sed ac odio. Sed vehicula hendrerit sem. Duis non odio.
+Morbi ut dui. Sed accumsan risus eget odio. In hac habitasse platea dictumst. Pellentesque non elit. Fusce sed justo
+eu urna porta tincidunt. Mauris felis odio, sollicitudin sed, volutpat a, ornare ac, erat. Morbi quis dolor. Donec
+pellentesque, erat ac sagittis semper, nunc dui lobortis purus, quis congue purus metus ultricies tellus. Proin et quam.
+Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Praesent sapien turpis,
+fermentum vel, eleifend faucibus, vehicula eu, lacus.
+
+Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Donec odio elit,
+dictum in, hendrerit sit amet, egestas sed, leo. Praesent feugiat sapien aliquet odio. Integer vitae justo. Aliquam
+vestibulum fringilla lorem. Sed neque lectus, consectetuer at, consectetuer sed, eleifend ac, lectus. Nulla facilisi.
+Pellentesque eget lectus. Proin eu metus. Sed porttitor. In hac habitasse platea dictumst. Suspendisse eu lectus. Ut
+mi mi, lacinia sit amet, placerat et, mollis vitae, dui. Sed ante tellus, tristique ut, iaculis eu, malesuada ac, dui.
+Mauris nibh leo, facilisis non, adipiscing quis, ultrices a, dui.
+
+\bmsubsubsection{Subsection title of second appendix\label{app2.1.1a}}
+
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Ut purus elit, vestibulum ut, placerat ac, adipiscing vitae,
+felis. Curabitur dictum gravida mauris. Nam arcu libero, nonummy eget, consectetuer id, vulputate a, magna. Donec
+vehicula augue eu neque. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.
+Mauris ut leo. Cras viverra metus rhoncus sem. Nulla et lectus vestibulum urna fringilla ultrices. Phasellus eu tellus
+sit amet tortor gravida placerat. Integer sapien est, iaculis in, pretium quis, viverra ac, nunc. Praesent eget sem vel
+leo ultrices bibendum. Aenean faucibus. Morbi dolor nulla, malesuada eu, pulvinar at, mollis ac, nulla. Curabitur
+auctor semper nulla. Donec varius orci eget risus. Duis nibh mi, congue eu, accumsan eleifend, sagittis quis, diam.
+Duis eget orci sit amet orci dignissim rutrum (Table~\ref{tab4}).
+
+Nam dui ligula, fringilla a, euismod sodales, sollicitudin vel, wisi. Morbi auctor lorem non justo. Nam lacus libero,
+pretium at, lobortis vitae, ultricies et, tellus. Donec aliquet, tortor sed accumsan bibendum, erat ligula aliquet magna,
+vitae ornare odio metus a mi. Morbi ac orci et nisl hendrerit mollis. Suspendisse ut massa. Cras nec ante. Pellentesque
+a nulla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aliquam tincidunt
+urna. Nulla ullamcorper vestibulum turpis. Pellentesque cursus luctus mauris.
+
+\begin{table*}[t]%
+\centering
+\caption{This is an example of Appendix table showing food requirements of army, navy and airforce.\label{tab4}}%
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}llllll@{\extracolsep\fill}}%
+\toprule
+\textbf{Col1 head} & \textbf{Col2 head} & \textbf{Col3 head} & \textbf{Col4 head} & \textbf{Col5 head} & \textbf{Col6 head} \\
+\midrule
+col1 text & col2 text & col3 text & col4 text & col5 text & col6 text\\
+col1 text & col2 text & col3 text & col4 text & col5 text & col6 text\\
+col1 text & col2 text & col3 text& col4 text & col5 text & col6 text\\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+
+Example for an equation inside appendix
+\begin{equation}
+{\mathcal{L}} = i \bar{\psi} \gamma^\mu D_\mu \psi - \frac{1}{4} F_{\mu\nu}^a F^{a\mu\nu} - m \bar{\psi} \psi\label{eq25}
+\end{equation}
+
+\bmsection{Example of another appendix section\label{app3}}%
+\vspace*{12pt}
+This is sample for paragraph text this is sample for paragraph text  this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text this is sample for paragraph text
+
+
+
+Nam dui ligula, fringilla a, euismod sodales, sollicitudin vel, wisi. Morbi auctor lorem non justo. Nam lacus libero,
+pretium at, lobortis vitae, ultricies et, tellus. Donec aliquet, tortor sed accumsan bibendum, erat ligula aliquet magna,
+vitae ornare odio metus a mi. Morbi ac orci et nisl hendrerit mollis. Suspendisse ut massa. Cras nec ante. Pellentesque
+a nulla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aliquam tincidunt
+urna. Nulla ullamcorper vestibulum turpis. Pellentesque cursus luctus mauris.
+
+Nulla malesuada porttitor diam. Donec felis erat, congue non, volutpat at, tincidunt tristique, libero. Vivamus
+viverra fermentum felis. Donec nonummy pellentesque ante. Phasellus adipiscing semper elit. Proin fermentum massa
+ac quam. Sed diam turpis, molestie vitae, placerat a, molestie nec, leo. Maecenas lacinia. Nam ipsum ligula, eleifend
+at, accumsan nec, suscipit a, ipsum. Morbi blandit ligula feugiat magna. Nunc eleifend consequat lorem. Sed lacinia
+nulla vitae enim. Pellentesque tincidunt purus vel magna. Integer non enim. Praesent euismod nunc eu purus. Donec
+bibendum quam in tellus. Nullam cursus pulvinar lectus. Donec et mi. Nam vulputate metus eu enim. Vestibulum
+pellentesque felis eu massa.
+\begin{equation}
+\mathcal{L} = i \bar{\psi} \gamma^\mu D_\mu \psi
+    - \frac{1}{4} F_{\mu\nu}^a F^{a\mu\nu} - m \bar{\psi} \psi
+\label{eq26}
+\end{equation}
+
+Nulla malesuada porttitor diam. Donec felis erat, congue non, volutpat at, tincidunt tristique, libero. Vivamus
+viverra fermentum felis. Donec nonummy pellentesque ante. Phasellus adipiscing semper elit. Proin fermentum massa
+ac quam. Sed diam turpis, molestie vitae, placerat a, molestie nec, leo. Maecenas lacinia. Nam ipsum ligula, eleifend
+at, accumsan nec, suscipit a, ipsum. Morbi blandit ligula feugiat magna. Nunc eleifend consequat lorem. Sed lacinia
+nulla vitae enim. Pellentesque tincidunt purus vel magna. Integer non enim. Praesent euismod nunc eu purus. Donec
+bibendum quam in tellus. Nullam cursus pulvinar lectus. Donec et mi. Nam vulputate metus eu enim. Vestibulum
+pellentesque felis eu massa.
+
+Quisque ullamcorper placerat ipsum. Cras nibh. Morbi vel justo vitae lacus tincidunt ultrices. Lorem ipsum dolor sit
+amet, consectetuer adipiscing elit. In hac habitasse platea dictumst. Integer tempus convallis augue. Etiam facilisis.
+Nunc elementum fermentum wisi. Aenean placerat. Ut imperdiet, enim sed gravida sollicitudin, felis odio placerat
+quam, ac pulvinar elit purus eget enim. Nunc vitae tortor. Proin tempus nibh sit amet nisl. Vivamus quis tortor
+vitae risus porta vehicula.
+
+
+\begin{center}
+\begin{tabular*}{250pt}{@{\extracolsep\fill}lcc@{\extracolsep\fill}}%
+\toprule
+\textbf{Col1 head} & \textbf{Col2 head} & \textbf{Col3 head} \\
+\midrule
+col1 text & col2 text & col3 text \\
+col1 text & col2 text & col3 text \\
+col1 text & col2 text & col3 text \\
+\bottomrule
+\end{tabular*}
+\end{center}
+
+
+Quisque ullamcorper placerat ipsum. Cras nibh. Morbi vel justo vitae lacus tincidunt ultrices. Lorem ipsum dolor sit
+amet, consectetuer adipiscing elit. In hac habitasse platea dictumst. Integer tempus convallis augue. Etiam facilisis.
+Nunc elementum fermentum wisi. Aenean placerat. Ut imperdiet, enim sed gravida sollicitudin, felis odio placerat
+quam, ac pulvinar elit purus eget enim. Nunc vitae tortor. Proin tempus nibh sit amet nisl. Vivamus quis tortor
+vitae risus porta vehicula.
+
+Fusce mauris. Vestibulum luctus nibh at lectus. Sed bibendum, nulla a faucibus semper, leo velit ultricies tellus, ac
+venenatis arcu wisi vel nisl. Vestibulum diam. Aliquam pellentesque, augue quis sagittis posuere, turpis lacus congue
+quam, in hendrerit risus eros eget felis. Maecenas eget erat in sapien mattis porttitor. Vestibulum porttitor. Nulla
+facilisi. Sed a turpis eu lacus commodo facilisis. Morbi fringilla, wisi in dignissim interdum, justo lectus sagittis dui, evehicula libero dui cursus dui. Mauris tempor ligula sed lacus. Duis cursus enim ut augue. Cras ac magna. Cras nulla.
+Nulla egestas. Curabitur a leo. Quisque egestas wisi eget nunc. Nam feugiat lacus vel est. Curabitur consectetuer.
+
+Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Donec odio elit,
+dictum in, hendrerit sit amet, egestas sed, leo. Praesent feugiat sapien aliquet odio. Integer vitae justo. Aliquam
+vestibulum fringilla lorem. Sed neque lectus, consectetuer at, consectetuer sed, eleifend ac, lectus. Nulla facilisi.
+Pellentesque eget lectus. Proin eu metus. Sed porttitor. In hac habitasse platea dictumst. Suspendisse eu lectus. Ut
+mi mi, lacinia sit amet, placerat et, mollis vitae, dui. Sed ante tellus, tristique ut, iaculis eu, malesuada ac, dui.
+Mauris nibh leo, facilisis non, adipiscing quis, ultrices a, dui.
+
+\nocite{*}% Show all bib entries - both cited and uncited; comment this line to view only cited bib entries;
+
+
+\bmsection*{Author Biography}
+
+\begin{biography}{\includegraphics[width=76pt,height=76pt,draft]{empty}}{
+{\textbf{Author Name.} Please check with the journal's author guidelines whether
+author biographies are required. They are usually only included for
+review-type articles, and typically require photos and brief
+biographies for each author.}}
+\end{biography}
+
+
+\end{document}
